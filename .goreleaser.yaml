@@ -25,7 +25,7 @@ archives:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-homebrews:
+brews:
   - name: glcron
     homepage: "https://github.com/nikitasova/glcron"
     description: "A TUI tool for managing GitLab CI/CD pipeline schedules"
