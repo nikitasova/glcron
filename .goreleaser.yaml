@@ -43,7 +43,7 @@ brews:
       owner: nikitasova
       name: homebrew-glcron
       branch: main
-      token: "{{ .Env.GITHUB_TOKEN }}"
+      token: "{{ .Env.GORELEASER_TOKEN }}"
 
 nfpms:
   - id: glcron-deb
