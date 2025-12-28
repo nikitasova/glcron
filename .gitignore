@@ -1,0 +1,15 @@
+# local
+examples/*
+task.md
+commands.md
+gitlab-token.txt
+
+# dependencies
+/dist/
+/node_modules
+glcron
+
+# other
+/docs/notes/
+README.md
+.env

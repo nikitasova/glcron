@@ -1,0 +1,35 @@
+# golangci-lint configuration
+# Run: golangci-lint run
+# Docs: https://golangci-lint.run/usage/configuration/
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unused
+    - misspell
+    - goimports
+    - unconvert
+    - gosec
+    - prealloc
+  exclusions:
+    paths:
+      - vendor
+      - examples
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+formatters:
+  enable:
+    - gofmt
