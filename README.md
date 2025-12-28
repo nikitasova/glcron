@@ -122,9 +122,9 @@ Press `c` to create a new configuration:
 
 ---
 
-<img src="docs/assets/screenshots/glcron-e-conf.png" alt="Empty config list" width="700">
+<p align="center"><img src="docs/assets/screenshots/glcron-e-conf.png" alt="Empty config list" width="700"></p>
 
-<img src="docs/assets/screenshots/glcron-c-conf.png" alt="Add new config" width="700">
+<p align="center"><img src="docs/assets/screenshots/glcron-c-conf.png" alt="Add new config" width="700"></p>
 
 ### 3. Manage Schedules
 
