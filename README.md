@@ -46,24 +46,31 @@
 
 | Platform | Support | Notes |
 |----------|---------|-------|
-| 🍎 **macOS** | 🟨 In progress... | Native Homebrew support |
-| 🐧 **Linux** | 🟨  In progress...l | Linuxbrew/Homebrew support |
+| 🍎 **macOS** | ✅ Available | Homebrew (Intel & Apple Silicon) |
+| 🐧 **Linux** | ✅ Available | Homebrew, DEB, RPM packages |
 
 ## 📦 Installation
-
 
 ### Homebrew (macOS/Linux)
 
 ```bash
-# Coming soon
-
+brew install nikitasova/glcron/glcron
 ```
 
-### APT (Debian/Ubuntu)
+### Debian/Ubuntu (.deb)
 
 ```bash
-# Coming soon
+# Download latest .deb from releases
+curl -LO https://github.com/nikitasova/glcron/releases/latest/download/glcron_0.1.0-beta_linux_amd64.deb
+sudo dpkg -i glcron_*.deb
+```
 
+### Fedora/RHEL (.rpm)
+
+```bash
+# Download latest .rpm from releases
+curl -LO https://github.com/nikitasova/glcron/releases/latest/download/glcron_0.1.0-beta_linux_amd64.rpm
+sudo rpm -i glcron_*.rpm
 ```
 
 ### From Source 
