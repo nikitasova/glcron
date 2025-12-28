@@ -21,10 +21,11 @@ builds:
       - -X 'glcron/internal/tui.AppVersion={{ .Version }}'
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-brews:
+homebrews:
   - name: glcron
     homepage: "https://github.com/nikitasova/glcron"
     description: "A TUI tool for managing GitLab CI/CD pipeline schedules"
