@@ -7,6 +7,7 @@ gitlab-token.txt
 # dependencies
 /dist/
 /node_modules
+glcron
 
 
 # other
