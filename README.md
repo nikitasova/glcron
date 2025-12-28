@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/nikitasova/glcron/releases"><img src="https://img.shields.io/github/v/release/nikitasova/glcron?style=flat-square&color=orange" alt="Release"></a>
   <a href="https://github.com/nikitasova/glcron/blob/main/LICENSE"><img src="https://img.shields.io/github/license/nikitasova/glcron?style=flat-square" alt="License"></a>
+  <a href="https://github.com/nikitasova/glcron/releases"><img src="https://img.shields.io/github/downloads/nikitasova/glcron/total?style=flat-square&color=green" alt="Downloads"></a>
   <a href="https://github.com/nikitasova/glcron/stargazers"><img src="https://img.shields.io/github/stars/nikitasova/glcron?style=flat-square" alt="Stars"></a>
   <a href="https://github.com/nikitasova/glcron/network/members"><img src="https://img.shields.io/github/forks/nikitasova/glcron?style=flat-square" alt="Forks"></a>
   <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go" alt="Go Version">
@@ -122,9 +123,9 @@ Press `c` to create a new configuration:
 
 ---
 
-<p align="center"><img src="docs/assets/screenshots/glcron-e-conf.png" alt="Empty config list" width="700"></p>
+<p align="center"><img src="docs/assets/screenshots/glcron-edit-conf.png" alt="Empty config list" width="700"></p>
 
-<p align="center"><img src="docs/assets/screenshots/glcron-c-conf.png" alt="Add new config" width="700"></p>
+<p align="center"><img src="docs/assets/screenshots/glcron-create-conf.png" alt="Add new config" width="700"></p>
 
 ### 3. Manage Schedules
 
@@ -147,7 +148,7 @@ Select your configuration and start managing pipeline schedules!
 
 <p align="center">
   <em>Create Schedule</em><br>
-  <img src="docs/assets/screenshots/glcron-c-cron.png" alt="Edit Schedule" width="700">
+  <img src="docs/assets/screenshots/glcron-create-cron.png" alt="Edit Schedule" width="700">
 </p>
 
 <p align="center">
