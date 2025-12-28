@@ -19,7 +19,7 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
-  <a href="#quick-start">Quick Start</a> •
+  <a href="#quick-start">Quick Start</a>
 </p>
 
 > 🚧 **Project under development...**
