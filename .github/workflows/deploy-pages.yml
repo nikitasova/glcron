@@ -1,0 +1,121 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Create site structure
+        run: |
+          mkdir -p _site/repo/apt/dists/stable/main/binary-amd64
+          mkdir -p _site/repo/apt/dists/stable/main/binary-arm64
+          mkdir -p _site/repo/apt/pool/main
+          
+          # Copy website files
+          cp site/index.html _site/
+          cp -r site/css _site/ 2>/dev/null || true
+          cp -r docs/assets _site/ 2>/dev/null || true
+
+      - name: Download DEBs from latest release
+        run: |
+          gh release download --pattern '*.deb' --dir _site/repo/apt/pool/main || echo "No DEBs found"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate APT repository metadata
+        id: apt-metadata
+        run: |
+          cd _site/repo/apt
+          
+          if ls pool/main/*.deb 1> /dev/null 2>&1; then
+            echo "Generating APT metadata..."
+            echo "has_debs=true" >> $GITHUB_OUTPUT
+            
+            dpkg-scanpackages --arch amd64 pool/main > dists/stable/main/binary-amd64/Packages 2>/dev/null || true
+            dpkg-scanpackages --arch arm64 pool/main > dists/stable/main/binary-arm64/Packages 2>/dev/null || true
+            
+            gzip -k dists/stable/main/binary-amd64/Packages || true
+            gzip -k dists/stable/main/binary-arm64/Packages || true
+            
+            cd dists/stable
+            cat > Release << EOF
+          Origin: glcron
+          Label: glcron
+          Suite: stable
+          Codename: stable
+          Architectures: amd64 arm64
+          Components: main
+          Description: glcron APT repository
+          Date: $(date -Ru)
+          EOF
+            apt-ftparchive release . >> Release
+          else
+            echo "No DEBs found, deploying site only"
+            echo "has_debs=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sign APT repository
+        if: steps.apt-metadata.outputs.has_debs == 'true'
+        run: |
+          cd _site/repo/apt
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+            cd dists/stable
+            gpg --batch --yes --armor --detach-sign -o Release.gpg Release
+            gpg --batch --yes --armor --clearsign -o InRelease Release
+            cd ../..
+            gpg --armor --export > glcron.gpg
+          else
+            touch glcron.gpg
+          fi
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Create install script
+        if: steps.apt-metadata.outputs.has_debs == 'true'
+        run: |
+          cat > _site/repo/apt/install.sh << 'SCRIPT'
+          #!/bin/bash
+          set -e
+          curl -fsSL https://nikitasova.github.io/glcron/repo/apt/glcron.gpg | sudo gpg --dearmor -o /usr/share/keyrings/glcron.gpg
+          echo "deb [signed-by=/usr/share/keyrings/glcron.gpg] https://nikitasova.github.io/glcron/repo/apt stable main" | sudo tee /etc/apt/sources.list.d/glcron.list
+          sudo apt update && sudo apt install -y glcron
+          echo "✓ glcron installed!"
+          SCRIPT
+          chmod +x _site/repo/apt/install.sh
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
