@@ -5,11 +5,14 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   release:
     runs-on: [self-hosted, docker]
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,3 +29,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_TOKEN: ${{ secrets.GORELEASER_TOKEN }}
+
+  update-apt:
+    needs: release
+    uses: ./.github/workflows/apt-repo.yml
+    secrets: inherit
