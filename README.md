@@ -126,6 +126,16 @@ Press `c` to create a new configuration:
 
 <img src="docs/assets/screenshots/gitlab-token-scope.png" alt="GitLab Token Creation" width="700">
 
+<br />
+
+> ⚠️ You also can create a token under project's parent group.
+> http(s)://gitlab.yourdomain/[GROUP]/[project] <br />
+> 1. Create GROUP token in GitLab
+> 2. add 'Project URL'
+> 3. add 'GROUP Access Token'
+>
+> This will allow you to have a wider access across group's projects.
+
 ---
 
 <p align="center"><img src="docs/assets/screenshots/glcron-edit-conf.png" alt="Empty config list" width="700"></p>

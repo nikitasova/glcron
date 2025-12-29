@@ -158,8 +158,10 @@ header {
 
 .install-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 24px;
+  max-width: 700px;
+  margin: 0 auto;
 }
 
 .install-card {
@@ -167,6 +169,7 @@ header {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px;
+  overflow: hidden;
 }
 
 .install-card h3 {
@@ -183,11 +186,42 @@ header {
   padding: 16px;
   overflow-x: auto;
   font-size: 0.9rem;
+  max-width: 100%;
 }
 
 .install-card code {
   color: var(--green);
   font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.install-card .download-btn-wrapper {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: transparent;
+  color: var(--green);
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  border-radius: 8px;
+  border: 1px solid var(--green);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.download-btn:hover {
+  background: var(--green);
+  color: var(--bg);
+  transform: translateY(-2px);
+}
+
+.download-btn svg {
+  flex-shrink: 0;
 }
 
 /* Features */
