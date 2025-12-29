@@ -56,18 +56,24 @@
 brew install nikitasova/glcron/glcron
 ```
 
-### Debian/Ubuntu (.deb)
+### Debian/Ubuntu (APT)
 
 ```bash
-# Download latest .deb from releases
-curl -LO https://github.com/nikitasova/glcron/releases/latest/download/glcron_0.1.0-beta_linux_amd64.deb
-sudo dpkg -i glcron_*.deb
+# Add GPG key
+curl -fsSL https://nikitasova.github.io/glcron/repo/apt/glcron.gpg | sudo gpg --dearmor -o /usr/share/keyrings/glcron.gpg
+
+# Add repository
+echo "deb [signed-by=/usr/share/keyrings/glcron.gpg] https://nikitasova.github.io/glcron/repo/apt stable main" | sudo tee /etc/apt/sources.list.d/glcron.list
+
+# Install
+sudo apt update
+sudo apt install glcron
 ```
 
-### Fedora/RHEL (.rpm)
+### Fedora/RHEL (RPM)
 
 ```bash
-# Download latest .rpm from releases
+# Download from GitHub releases
 curl -LO https://github.com/nikitasova/glcron/releases/latest/download/glcron_0.1.0-beta_linux_amd64.rpm
 sudo rpm -i glcron_*.rpm
 ```

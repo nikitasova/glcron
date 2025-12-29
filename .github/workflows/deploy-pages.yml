@@ -1,0 +1,54 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Create site structure
+        run: |
+          mkdir -p _site
+          
+          # Copy website files
+          cp site/index.html _site/
+          cp -r site/css _site/ 2>/dev/null || true
+          cp -r docs/assets _site/ 2>/dev/null || true
+          
+          # Create placeholder for APT repo (actual repo managed by apt-repo workflow)
+          mkdir -p _site/repo/apt
+          echo "APT repository - see releases for packages" > _site/repo/apt/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
