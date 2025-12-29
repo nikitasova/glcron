@@ -20,6 +20,7 @@ type GitLabServiceInterface interface {
 	CreateSchedule(req *models.ScheduleCreateRequest) (*models.Schedule, error)
 	UpdateSchedule(id int, req *models.ScheduleUpdateRequest) (*models.Schedule, error)
 	DeleteSchedule(id int) error
+	RunSchedule(id int) error
 	GetBranches() ([]models.Branch, error)
 	CreateVariable(scheduleID int, variable *models.Variable) error
 	UpdateVariable(scheduleID int, variable *models.Variable) error
@@ -305,6 +306,22 @@ func (g *GitLabService) DeleteSchedule(id int) error {
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to delete schedule: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// RunSchedule triggers a pipeline schedule to run immediately
+func (g *GitLabService) RunSchedule(id int) error {
+	resp, err := g.doRequest("POST", fmt.Sprintf("/api/v4/projects/%d/pipeline_schedules/%d/play", g.projectID, id), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to run schedule: %s - %s", resp.Status, string(body))
 	}
 
 	return nil
