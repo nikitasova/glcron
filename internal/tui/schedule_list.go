@@ -97,6 +97,13 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 					return toggleScheduleMsg{id: schedule.ID, active: !schedule.Active}
 				}
 			}
+		case "r":
+			if m.cursor < len(m.filtered) {
+				schedule := m.filtered[m.cursor]
+				return m, func() tea.Msg {
+					return runScheduleMsg{id: schedule.ID}
+				}
+			}
 		case "/":
 			m.searching = true
 			m.search.Focus()
