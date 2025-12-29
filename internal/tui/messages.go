@@ -102,6 +102,10 @@ type toggleScheduleMsg struct {
 	active bool
 }
 
+type runScheduleMsg struct {
+	id int
+}
+
 type refreshSchedulesMsg struct{}
 
 // Helper to create navigate command

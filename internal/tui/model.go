@@ -196,6 +196,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggleScheduleMsg:
 		return m.handleToggleSchedule(msg)
 
+	case runScheduleMsg:
+		return m.handleRunSchedule(msg)
+
 	case refreshSchedulesMsg:
 		return m.handleRefreshSchedules()
 
@@ -365,9 +368,10 @@ func (m Model) renderLegend() string {
 			yellow.Render("e") + " Edit",
 			yellow.Render("c") + " Create",
 			yellow.Render("d") + " Delete",
+			yellow.Render("r") + " Run Pipeline",
 			yellow.Render("A") + " Toggle",
 			yellow.Render("u") + " Update",
-			yellow.Render("o") + " Return to config list",
+			yellow.Render("o") + " Configs",
 			yellow.Render("q") + " Quit",
 		}
 	case ScreenEditSchedule, ScreenNewSchedule:
@@ -548,6 +552,23 @@ func (m Model) handleToggleSchedule(msg toggleScheduleMsg) (tea.Model, tea.Cmd) 
 
 		schedules, _ := gitlabService.GetSchedules()
 		return schedulesLoadedMsg{schedules: schedules}
+	}
+}
+
+func (m Model) handleRunSchedule(msg runScheduleMsg) (tea.Model, tea.Cmd) {
+	m.loading = true
+	m.statusMsg = "Running pipeline..."
+	m.statusType = "warning"
+
+	gitlabService := m.gitlabService
+
+	return m, func() tea.Msg {
+		if err := gitlabService.RunSchedule(msg.id); err != nil {
+			return errMsg{err}
+		}
+
+		schedules, _ := gitlabService.GetSchedules()
+		return schedulesSavedMsg{schedules: schedules, message: "Pipeline started!"}
 	}
 }
 
