@@ -12,13 +12,16 @@ import (
 )
 
 type ScheduleListModel struct {
-	schedules []models.Schedule
-	filtered  []models.Schedule
-	cursor    int
-	width     int
-	height    int
-	search    textinput.Model
-	searching bool
+	schedules     []models.Schedule
+	filtered      []models.Schedule
+	cursor        int
+	width         int
+	height        int
+	search        textinput.Model
+	searching     bool
+	confirmDelete bool // showing delete confirmation dialog
+	confirmYes    bool // true = Yes selected, false = No selected
+	deleteID      int  // ID of schedule to delete
 }
 
 func NewScheduleListModel() ScheduleListModel {
@@ -51,6 +54,36 @@ func (m *ScheduleListModel) SetItems(schedules []models.Schedule) {
 func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle confirmation dialog
+		if m.confirmDelete {
+			switch msg.String() {
+			case "left", "h":
+				m.confirmYes = true
+			case "right", "l":
+				m.confirmYes = false
+			case "y", "Y":
+				m.confirmYes = true
+				m.confirmDelete = false
+				return m, func() tea.Msg {
+					return deleteScheduleMsg{id: m.deleteID}
+				}
+			case "n", "N", "esc":
+				m.confirmDelete = false
+				m.confirmYes = true // reset to default
+			case "enter":
+				if m.confirmYes {
+					m.confirmDelete = false
+					return m, func() tea.Msg {
+						return deleteScheduleMsg{id: m.deleteID}
+					}
+				} else {
+					m.confirmDelete = false
+					m.confirmYes = true // reset to default
+				}
+			}
+			return m, nil
+		}
+
 		if m.searching {
 			switch msg.String() {
 			case "enter", "esc":
@@ -71,10 +104,14 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
+			} else if len(m.filtered) > 0 {
+				m.cursor = len(m.filtered) - 1 // wrap to last
 			}
 		case "down", "j":
 			if m.cursor < len(m.filtered)-1 {
 				m.cursor++
+			} else if len(m.filtered) > 0 {
+				m.cursor = 0 // wrap to first
 			}
 		case "enter", "e":
 			if m.cursor < len(m.filtered) {
@@ -86,9 +123,9 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 		case "d":
 			if m.cursor < len(m.filtered) {
 				schedule := m.filtered[m.cursor]
-				return m, func() tea.Msg {
-					return deleteScheduleMsg{id: schedule.ID}
-				}
+				m.confirmDelete = true
+				m.confirmYes = true // Yes selected by default
+				m.deleteID = schedule.ID
 			}
 		case "A":
 			if m.cursor < len(m.filtered) {
@@ -173,7 +210,14 @@ func (m ScheduleListModel) View() string {
 		result = append(result, left+"│"+right)
 	}
 
-	return strings.Join(result, "\n")
+	content := strings.Join(result, "\n")
+
+	// Overlay confirmation dialog if active
+	if m.confirmDelete {
+		content = m.overlayConfirmDialog(content)
+	}
+
+	return content
 }
 
 func (m ScheduleListModel) renderLeftColumn(width int) []string {
@@ -458,4 +502,144 @@ func formatDetailTime(t time.Time) string {
 		return "in 1 day"
 	}
 	return fmt.Sprintf("in %d days", days)
+}
+
+func (m ScheduleListModel) overlayConfirmDialog(content string) string {
+	lines := strings.Split(content, "\n")
+
+	// Dialog dimensions
+	dialogWidth := 50
+	contentWidth := dialogWidth - 4 // Account for borders and padding
+
+	// Get schedule description for the message
+	scheduleName := ""
+	for _, s := range m.filtered {
+		if s.ID == m.deleteID {
+			scheduleName = s.Description
+			break
+		}
+	}
+
+	// Wrap the description if too long
+	var descLines []string
+	question := fmt.Sprintf("Delete \"%s\"?", scheduleName)
+	if len(question) <= contentWidth {
+		descLines = append(descLines, question)
+	} else {
+		// Wrap the description - first add "Delete?" then the name on separate lines
+		descLines = append(descLines, "Delete?")
+		descLines = append(descLines, "") // gap
+		remaining := scheduleName
+		for len(remaining) > 0 {
+			lineLen := contentWidth
+			if lineLen > len(remaining) {
+				lineLen = len(remaining)
+			}
+			descLines = append(descLines, remaining[:lineLen])
+			remaining = remaining[lineLen:]
+		}
+	}
+
+	// Calculate dialog height based on content
+	dialogHeight := 4 + len(descLines) // top border + empty line + desc lines + buttons + bottom border
+
+	// Center the dialog
+	startX := (m.width - dialogWidth) / 2
+	startY := (len(lines) - dialogHeight) / 2
+
+	if startX < 0 {
+		startX = 0
+	}
+	if startY < 0 {
+		startY = 0
+	}
+
+	// Build dialog lines
+	borderH := strings.Repeat(BorderTop, dialogWidth-2)
+	title := " Delete Schedule "
+	titlePadding := (dialogWidth - 2 - len(title)) / 2
+	topBorder := BorderTopLeft + strings.Repeat(BorderTop, titlePadding) + title + strings.Repeat(BorderTop, dialogWidth-2-titlePadding-len(title)) + BorderTopRight
+
+	// Buttons - centered
+	yesBtn := "[ Yes ]"
+	noBtn := "[ No ]"
+	if m.confirmYes {
+		yesBtn = SelectedStyle.Render("[ Yes ]")
+		noBtn = GrayStyle.Render("[ No ]")
+	} else {
+		yesBtn = GrayStyle.Render("[ Yes ]")
+		noBtn = SelectedStyle.Render("[ No ]")
+	}
+	buttonsText := yesBtn + "   " + noBtn
+	buttonsWidth := lipgloss.Width(buttonsText)
+	buttonsPadding := (dialogWidth - 2 - buttonsWidth) / 2
+	if buttonsPadding < 0 {
+		buttonsPadding = 0
+	}
+	buttonsPadded := padToWidth(strings.Repeat(" ", buttonsPadding)+buttonsText, dialogWidth-2)
+
+	var dialogLines []string
+	dialogLines = append(dialogLines, topBorder)
+	dialogLines = append(dialogLines, BorderLeft+strings.Repeat(" ", dialogWidth-2)+BorderRight)
+
+	// Add description lines (centered)
+	for _, descLine := range descLines {
+		descPadding := (dialogWidth - 2 - len(descLine)) / 2
+		if descPadding < 0 {
+			descPadding = 0
+		}
+		descPadded := padToWidth(strings.Repeat(" ", descPadding)+descLine, dialogWidth-2)
+		dialogLines = append(dialogLines, BorderLeft+descPadded+BorderRight)
+	}
+
+	dialogLines = append(dialogLines, BorderLeft+strings.Repeat(" ", dialogWidth-2)+BorderRight)
+	dialogLines = append(dialogLines, BorderLeft+buttonsPadded+BorderRight)
+	dialogLines = append(dialogLines, BorderBottomLeft+borderH+BorderBottomRight)
+
+	// Overlay dialog onto content
+	for i, dialogLine := range dialogLines {
+		lineIdx := startY + i
+		if lineIdx >= 0 && lineIdx < len(lines) {
+			line := lines[lineIdx]
+			// Replace portion of line with dialog
+			newLine := m.insertDialogLine(line, dialogLine, startX, dialogWidth)
+			lines[lineIdx] = newLine
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m ScheduleListModel) insertDialogLine(line, dialogLine string, startX, dialogWidth int) string {
+	// Convert to runes for proper handling
+	lineRunes := []rune(line)
+
+	// Ensure line is wide enough
+	for len(lineRunes) < startX+dialogWidth {
+		lineRunes = append(lineRunes, ' ')
+	}
+
+	// Simple approach: rebuild the line
+	// Note: This is simplified and may not handle ANSI codes perfectly
+	result := ""
+	lineWidth := lipgloss.Width(line)
+
+	// Pad line if needed
+	if lineWidth < startX {
+		result = line + strings.Repeat(" ", startX-lineWidth)
+		result += dialogLine
+	} else {
+		// We need to insert the dialog into the line
+		// For simplicity, we'll use a character-based approach
+		// This works best when the background has no ANSI codes at the insertion point
+		if startX < len(lineRunes) && startX+dialogWidth <= len(lineRunes) {
+			result = string(lineRunes[:startX]) + dialogLine + string(lineRunes[startX+dialogWidth:])
+		} else if startX < len(lineRunes) {
+			result = string(lineRunes[:startX]) + dialogLine
+		} else {
+			result = line + strings.Repeat(" ", startX-len(lineRunes)) + dialogLine
+		}
+	}
+
+	return result
 }
