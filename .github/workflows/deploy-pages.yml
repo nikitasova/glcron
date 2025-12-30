@@ -27,11 +27,6 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Install APT tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev apt-utils
-
       - name: Create site structure
         run: |
           mkdir -p _site/repo/apt/dists/stable/main/binary-amd64
