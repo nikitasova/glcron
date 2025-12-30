@@ -33,6 +33,5 @@ jobs:
 
   deploy-pages:
     needs: release
-    if: ${{ !contains(github.ref, '-beta') && !contains(github.ref, '-alpha') }}
     uses: ./.github/workflows/deploy-pages.yml
     secrets: inherit
