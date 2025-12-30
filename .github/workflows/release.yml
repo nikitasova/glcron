@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   release:
+    environment: release
     runs-on: [self-hosted, docker]
     steps:
       - uses: actions/checkout@v4
