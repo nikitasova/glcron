@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-      - '[0-9]*'
 
 permissions:
   contents: write
@@ -13,7 +12,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, docker]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,8 +30,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_TOKEN: ${{ secrets.GORELEASER_TOKEN }}
 
-  update-apt:
+  deploy-pages:
     needs: release
-    if: "!contains(github.ref, '-')"
-    uses: ./.github/workflows/apt-repo.yml
+    uses: ./.github/workflows/deploy-pages.yml
     secrets: inherit

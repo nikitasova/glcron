@@ -1,9 +1,0 @@
-name: Update APT Repository
-
-on:
-  workflow_call:
-
-jobs:
-  update-apt:
-    uses: ./.github/workflows/deploy-pages.yml
-    secrets: inherit
