@@ -115,6 +115,12 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 			}
 		case "o":
 			return m, Navigate(ScreenConfigList)
+		case "y":
+			// Yonk - copy current schedule to new
+			if m.cursor < len(m.filtered) {
+				schedule := &m.filtered[m.cursor]
+				return m, NavigateToYonk(schedule)
+			}
 		}
 	}
 
@@ -184,7 +190,8 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		colDescription = 50
 		colCron        = 15
 		colBranch      = 18
-		colStatus      = 10
+		colStatus      = 8
+		colNext        = 8
 	)
 
 	var lines []string
@@ -204,7 +211,7 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		padRight("Cron", colCron) +
 		padRight("Branch", colBranch) +
 		padRight("Status", colStatus) +
-		"Next"
+		padRight("Next", colNext)
 	lines = append(lines, headerStyle.Render(headerRow))
 
 	// Table rows
@@ -251,7 +258,7 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		colCronStr := padRight(truncateStr(schedule.Cron, colCron-2), colCron)
 		colBranchStr := padRight(truncateStr(schedule.Ref, colBranch-2), colBranch)
 		colStatusStr := padRight(statusIcon, colStatus)
-		colNextStr := nextRun
+		colNextStr := padRight(truncateStr(nextRun, colNext-2), colNext)
 
 		if i == m.cursor {
 			// Selected row - rectangle highlight

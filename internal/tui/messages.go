@@ -127,6 +127,22 @@ func NavigateToEditConfig(config *models.Config) tea.Cmd {
 	}
 }
 
+func NavigateToYonk(schedule *models.Schedule) tea.Cmd {
+	return func() tea.Msg {
+		// Create a copy with "[Copy]" prefix
+		copied := &models.Schedule{
+			Description:  "[Copy] " + schedule.Description,
+			Ref:          schedule.Ref,
+			Cron:         schedule.Cron,
+			CronTimezone: schedule.CronTimezone,
+			Active:       schedule.Active,
+			Variables:    make([]models.Variable, len(schedule.Variables)),
+		}
+		copy(copied.Variables, schedule.Variables)
+		return navigateMsg{screen: ScreenNewSchedule, schedule: copied}
+	}
+}
+
 // ClearStatusAfter returns a command that clears the status message after the specified duration
 func ClearStatusAfter(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {

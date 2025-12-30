@@ -367,6 +367,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("/") + " Search",
 			yellow.Render("e") + " Edit",
 			yellow.Render("c") + " Create",
+			yellow.Render("y") + " Yonk",
 			yellow.Render("d") + " Delete",
 			yellow.Render("r") + " Run Pipeline",
 			yellow.Render("A") + " Toggle",
@@ -419,7 +420,8 @@ func (m Model) handleNavigation(msg navigateMsg) (tea.Model, tea.Cmd) {
 
 	case ScreenNewSchedule:
 		m.screen = ScreenNewSchedule
-		m.scheduleForm.SetSchedule(nil, m.branches, true)
+		// m.scheduleForm.SetSchedule(nil, m.branches, true)
+		m.scheduleForm.SetSchedule(msg.schedule, m.branches, true)
 
 	case ScreenEditConfig:
 		m.screen = ScreenEditConfig
