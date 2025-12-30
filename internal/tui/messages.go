@@ -51,9 +51,10 @@ type clearStatusMsg struct{}
 
 // Navigation messages
 type navigateMsg struct {
-	screen   Screen
-	schedule *models.Schedule
-	config   *models.Config
+	screen      Screen
+	schedule    *models.Schedule
+	config      *models.Config
+	configIndex int
 }
 
 // Config actions
@@ -121,9 +122,9 @@ func NavigateToEdit(schedule *models.Schedule) tea.Cmd {
 	}
 }
 
-func NavigateToEditConfig(config *models.Config) tea.Cmd {
+func NavigateToEditConfig(config *models.Config, index int) tea.Cmd {
 	return func() tea.Msg {
-		return navigateMsg{screen: ScreenEditConfig, config: config}
+		return navigateMsg{screen: ScreenEditConfig, config: config, configIndex: index}
 	}
 }
 

@@ -380,7 +380,7 @@ func (m ScheduleListModel) renderDetailsPanel(width int) []string {
 
 		content = append(content, label.Render("Variables"))
 		if len(s.Variables) == 0 {
-			content = append(content, "  "+gray.Render("No variables"))
+			content = append(content, "  "+gray.Render("(No variables)"))
 		} else {
 			for _, v := range s.Variables {
 				content = append(content, "  "+label.Render("▶")+" "+blue.Render(v.Key)+": "+gray.Render("*****"))
