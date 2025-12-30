@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '[0-9]*'
 
 permissions:
   contents: write
@@ -12,7 +13,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,5 +33,6 @@ jobs:
 
   update-apt:
     needs: release
+    if: "!contains(github.ref, '-')"
     uses: ./.github/workflows/apt-repo.yml
     secrets: inherit
