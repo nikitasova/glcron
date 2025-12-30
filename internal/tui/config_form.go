@@ -64,8 +64,9 @@ func (m *ConfigFormModel) SetSize(width, height int) {
 	m.height = height
 }
 
-func (m *ConfigFormModel) SetConfig(config *models.Config, isNew bool) {
+func (m *ConfigFormModel) SetConfig(config *models.Config, index int, isNew bool) {
 	m.isNew = isNew
+	m.configIndex = index
 
 	if config != nil {
 		m.nameInput.SetValue(config.Name)

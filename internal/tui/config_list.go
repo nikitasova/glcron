@@ -91,7 +91,7 @@ func (m ConfigListModel) Update(msg tea.Msg) (ConfigListModel, tea.Cmd) {
 		case "e":
 			if m.cursor < len(m.configs) {
 				config := m.configs[m.cursor]
-				return m, NavigateToEditConfig(&config)
+				return m, NavigateToEditConfig(&config, m.cursor)
 			}
 		case "d":
 			if m.cursor < len(m.configs) {

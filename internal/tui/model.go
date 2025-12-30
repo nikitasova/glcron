@@ -367,6 +367,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("/") + " Search",
 			yellow.Render("e") + " Edit",
 			yellow.Render("c") + " Create",
+			yellow.Render("y") + " Yonk",
 			yellow.Render("d") + " Delete",
 			yellow.Render("r") + " Run Pipeline",
 			yellow.Render("A") + " Toggle",
@@ -419,15 +420,16 @@ func (m Model) handleNavigation(msg navigateMsg) (tea.Model, tea.Cmd) {
 
 	case ScreenNewSchedule:
 		m.screen = ScreenNewSchedule
-		m.scheduleForm.SetSchedule(nil, m.branches, true)
+		// m.scheduleForm.SetSchedule(nil, m.branches, true)
+		m.scheduleForm.SetSchedule(msg.schedule, m.branches, true)
 
 	case ScreenEditConfig:
 		m.screen = ScreenEditConfig
-		m.configForm.SetConfig(msg.config, false)
+		m.configForm.SetConfig(msg.config, msg.configIndex, false)
 
 	case ScreenNewConfig:
 		m.screen = ScreenNewConfig
-		m.configForm.SetConfig(nil, true)
+		m.configForm.SetConfig(nil, -1, true)
 	}
 
 	return m, nil
@@ -596,11 +598,24 @@ func (m Model) handleSaveConfig(msg saveConfigMsg) (tea.Model, tea.Cmd) {
 	gitlabService := m.gitlabService
 	configService := m.configService
 
+	// Get existing config to preserve ProjectID/BaseURL if updating
+	var existingConfig *models.Config
+	if !msg.isNew && msg.index >= 0 && msg.index < len(m.configs) {
+		existing := m.configs[msg.index]
+		existingConfig = &existing
+	}
+
 	return m, func() tea.Msg {
 		config := models.Config{
 			Name:       msg.name,
 			ProjectURL: msg.url,
 			Token:      msg.token,
+		}
+
+		// Preserve ProjectID and BaseURL if URL hasn't changed
+		if existingConfig != nil && existingConfig.ProjectURL == msg.url {
+			config.ProjectID = existingConfig.ProjectID
+			config.BaseURL = existingConfig.BaseURL
 		}
 
 		if err := gitlabService.ValidateConfig(&config); err != nil {

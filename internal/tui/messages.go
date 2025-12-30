@@ -51,9 +51,10 @@ type clearStatusMsg struct{}
 
 // Navigation messages
 type navigateMsg struct {
-	screen   Screen
-	schedule *models.Schedule
-	config   *models.Config
+	screen      Screen
+	schedule    *models.Schedule
+	config      *models.Config
+	configIndex int
 }
 
 // Config actions
@@ -121,9 +122,25 @@ func NavigateToEdit(schedule *models.Schedule) tea.Cmd {
 	}
 }
 
-func NavigateToEditConfig(config *models.Config) tea.Cmd {
+func NavigateToEditConfig(config *models.Config, index int) tea.Cmd {
 	return func() tea.Msg {
-		return navigateMsg{screen: ScreenEditConfig, config: config}
+		return navigateMsg{screen: ScreenEditConfig, config: config, configIndex: index}
+	}
+}
+
+func NavigateToYonk(schedule *models.Schedule) tea.Cmd {
+	return func() tea.Msg {
+		// Create a copy with "[Copy]" prefix
+		copied := &models.Schedule{
+			Description:  "[Copy] " + schedule.Description,
+			Ref:          schedule.Ref,
+			Cron:         schedule.Cron,
+			CronTimezone: schedule.CronTimezone,
+			Active:       schedule.Active,
+			Variables:    make([]models.Variable, len(schedule.Variables)),
+		}
+		copy(copied.Variables, schedule.Variables)
+		return navigateMsg{screen: ScreenNewSchedule, schedule: copied}
 	}
 }
 
