@@ -250,6 +250,14 @@ func (m *ScheduleListModel) filterSchedules() {
 }
 
 func (m ScheduleListModel) View() string {
+	// Show popup as full screen if active
+	if m.deletePopup != nil {
+		return m.deletePopup.View(m.width, m.height)
+	}
+	if m.takeOwnershipPopup != nil {
+		return m.takeOwnershipPopup.View(m.width, m.height)
+	}
+
 	// Split into left (2/3) and right (1/3) columns
 	leftWidth := (m.width * 2) / 3
 	rightWidth := m.width - leftWidth - 1
@@ -276,17 +284,7 @@ func (m ScheduleListModel) View() string {
 		result = append(result, left+"│"+right)
 	}
 
-	content := strings.Join(result, "\n")
-
-	// Overlay popups if active
-	if m.deletePopup != nil {
-		content = m.deletePopup.OverlayOnContent(content, m.width, len(result))
-	}
-	if m.takeOwnershipPopup != nil {
-		content = m.takeOwnershipPopup.OverlayOnContent(content, m.width, len(result))
-	}
-
-	return content
+	return strings.Join(result, "\n")
 }
 
 func (m ScheduleListModel) renderLeftColumn(width int) []string {

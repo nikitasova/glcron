@@ -106,6 +106,11 @@ func (m ConfigListModel) Update(msg tea.Msg) (ConfigListModel, tea.Cmd) {
 }
 
 func (m ConfigListModel) View() string {
+	// Show delete popup as full screen if active
+	if m.deletePopup != nil {
+		return m.deletePopup.View(m.width, m.height)
+	}
+
 	if len(m.configs) == 0 {
 		return m.renderEmptyState()
 	}
@@ -138,14 +143,7 @@ func (m ConfigListModel) View() string {
 		result = append(result, left+"│"+right)
 	}
 
-	content := strings.Join(result, "\n")
-
-	// Overlay delete popup if active
-	if m.deletePopup != nil {
-		content = m.deletePopup.OverlayOnContent(content, m.width, len(result))
-	}
-
-	return content
+	return strings.Join(result, "\n")
 }
 
 func (m ConfigListModel) renderEmptyState() string {

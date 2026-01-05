@@ -126,57 +126,47 @@ func (p *ConfirmPopup) Render() []string {
 	return lines
 }
 
-// OverlayOnContent overlays the popup dialog onto existing content
-func (p *ConfirmPopup) OverlayOnContent(content string, screenWidth, screenHeight int) string {
-	contentLines := strings.Split(content, "\n")
+// View renders the popup centered on a full screen
+func (p *ConfirmPopup) View(screenWidth, screenHeight int) string {
 	dialogLines := p.Render()
-
 	dialogWidth := p.Width
 	dialogHeight := len(dialogLines)
 
-	// Center the dialog
-	startX := (screenWidth - dialogWidth) / 2
-	startY := (screenHeight - dialogHeight) / 2
-
-	if startX < 0 {
-		startX = 0
-	}
-	if startY < 0 {
-		startY = 0
+	// Calculate vertical centering
+	topPadding := (screenHeight - dialogHeight) / 2
+	if topPadding < 0 {
+		topPadding = 0
 	}
 
-	// Ensure content has enough lines
-	for len(contentLines) < startY+dialogHeight {
-		contentLines = append(contentLines, strings.Repeat(" ", screenWidth))
+	// Calculate horizontal centering
+	leftPadding := (screenWidth - dialogWidth) / 2
+	if leftPadding < 0 {
+		leftPadding = 0
 	}
 
-	// Overlay dialog onto content
-	for i, dialogLine := range dialogLines {
-		lineIdx := startY + i
-		if lineIdx >= 0 && lineIdx < len(contentLines) {
-			contentLines[lineIdx] = insertDialogIntoLine(contentLines[lineIdx], dialogLine, startX, dialogWidth)
+	var lines []string
+
+	// Add top padding (empty lines)
+	for i := 0; i < topPadding; i++ {
+		lines = append(lines, strings.Repeat(" ", screenWidth))
+	}
+
+	// Add dialog lines with horizontal padding
+	for _, dialogLine := range dialogLines {
+		line := strings.Repeat(" ", leftPadding) + dialogLine
+		// Pad to full width
+		if lipgloss.Width(line) < screenWidth {
+			line += strings.Repeat(" ", screenWidth-lipgloss.Width(line))
 		}
+		lines = append(lines, line)
 	}
 
-	return strings.Join(contentLines, "\n")
-}
-
-// insertDialogIntoLine inserts dialog content into a line at specified position
-func insertDialogIntoLine(line, dialogLine string, startX, dialogWidth int) string {
-	lineRunes := []rune(line)
-
-	// Ensure line is wide enough
-	for len(lineRunes) < startX+dialogWidth {
-		lineRunes = append(lineRunes, ' ')
+	// Add bottom padding (empty lines to fill screen)
+	for len(lines) < screenHeight {
+		lines = append(lines, strings.Repeat(" ", screenWidth))
 	}
 
-	// Insert dialog into line
-	if startX < len(lineRunes) && startX+dialogWidth <= len(lineRunes) {
-		return string(lineRunes[:startX]) + dialogLine + string(lineRunes[startX+dialogWidth:])
-	} else if startX < len(lineRunes) {
-		return string(lineRunes[:startX]) + dialogLine
-	}
-	return line + strings.Repeat(" ", startX-len(lineRunes)) + dialogLine
+	return strings.Join(lines, "\n")
 }
 
 // wrapText wraps text to fit within maxWidth

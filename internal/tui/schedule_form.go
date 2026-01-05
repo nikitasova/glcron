@@ -491,13 +491,18 @@ func (m ScheduleFormModel) saveWithOwnership() (ScheduleFormModel, tea.Cmd) {
 }
 
 func (m ScheduleFormModel) View() string {
+	// Show ownership popup as full screen if active
+	if m.ownershipPopup != nil {
+		return m.ownershipPopup.View(m.width, m.height)
+	}
+
 	leftWidth := (m.width * 3) / 5
 	rightWidth := m.width - leftWidth - 1
 
 	leftLines := m.renderFormPanel(leftWidth)
 	rightLines := m.renderHelpPanel(rightWidth)
 
-	// If popup is showing, overlay it
+	// If dropdown popup is showing, overlay it
 	if m.showingPopup {
 		return m.renderWithPopup(leftLines, rightLines, leftWidth, rightWidth)
 	}
@@ -521,14 +526,7 @@ func (m ScheduleFormModel) View() string {
 		result = append(result, left+"│"+right)
 	}
 
-	content := strings.Join(result, "\n")
-
-	// Overlay ownership confirmation dialog if active
-	if m.ownershipPopup != nil {
-		content = m.ownershipPopup.OverlayOnContent(content, m.width, len(result))
-	}
-
-	return content
+	return strings.Join(result, "\n")
 }
 
 func (m ScheduleFormModel) renderFormPanel(width int) []string {
