@@ -488,17 +488,11 @@ func (m ScheduleListModel) renderDetailsPanel(width int) []string {
 		}
 		content = append(content, "  "+pipelineStatus)
 		if s.LastPipeline != nil && s.LastPipeline.WebURL != "" {
+			// Create clickable hyperlink using OSC 8 escape sequence
+			linkText := fmt.Sprintf("Pipeline #%d", s.LastPipeline.ID)
+			hyperlink := fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", s.LastPipeline.WebURL, blue.Render(linkText))
 			content = append(content, "")
-			urlMaxWidth := width - 12
-			url := s.LastPipeline.WebURL
-			for len(url) > 0 {
-				lineLen := urlMaxWidth
-				if lineLen > len(url) {
-					lineLen = len(url)
-				}
-				content = append(content, "  "+blue.Render(url[:lineLen]))
-				url = url[lineLen:]
-			}
+			content = append(content, "  "+hyperlink)
 		}
 		content = append(content, "")
 
