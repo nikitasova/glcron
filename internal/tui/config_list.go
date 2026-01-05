@@ -10,13 +10,12 @@ import (
 )
 
 type ConfigListModel struct {
-	configs       []models.Config
-	cursor        int
-	width         int
-	height        int
-	confirmDelete bool // showing delete confirmation dialog
-	confirmYes    bool // true = Yes selected, false = No selected
-	deleteIndex   int  // index of config to delete
+	configs     []models.Config
+	cursor      int
+	width       int
+	height      int
+	deletePopup *ConfirmPopup
+	deleteIndex int
 }
 
 func NewConfigListModel() ConfigListModel {
@@ -41,31 +40,30 @@ func (m *ConfigListModel) SetItems(configs []models.Config) {
 func (m ConfigListModel) Update(msg tea.Msg) (ConfigListModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle confirmation dialog
-		if m.confirmDelete {
+		// Handle delete popup
+		if m.deletePopup != nil {
 			switch msg.String() {
 			case "left", "h":
-				m.confirmYes = true
+				m.deletePopup.SelectYes()
 			case "right", "l":
-				m.confirmYes = false
+				m.deletePopup.SelectNo()
 			case "y", "Y":
-				m.confirmYes = true
-				m.confirmDelete = false
+				m.deletePopup = nil
+				idx := m.deleteIndex
 				return m, func() tea.Msg {
-					return deleteConfigMsg{index: m.deleteIndex}
+					return deleteConfigMsg{index: idx}
 				}
 			case "n", "N", "esc":
-				m.confirmDelete = false
-				m.confirmYes = true // reset to default
+				m.deletePopup = nil
 			case "enter":
-				if m.confirmYes {
-					m.confirmDelete = false
+				if m.deletePopup.IsYesSelected() {
+					m.deletePopup = nil
+					idx := m.deleteIndex
 					return m, func() tea.Msg {
-						return deleteConfigMsg{index: m.deleteIndex}
+						return deleteConfigMsg{index: idx}
 					}
 				} else {
-					m.confirmDelete = false
-					m.confirmYes = true // reset to default
+					m.deletePopup = nil
 				}
 			}
 			return m, nil
@@ -95,9 +93,12 @@ func (m ConfigListModel) Update(msg tea.Msg) (ConfigListModel, tea.Cmd) {
 			}
 		case "d":
 			if m.cursor < len(m.configs) {
-				m.confirmDelete = true
-				m.confirmYes = true // Yes selected by default
+				config := m.configs[m.cursor]
 				m.deleteIndex = m.cursor
+				m.deletePopup = NewConfirmPopup(
+					"Delete Config",
+					fmt.Sprintf("Delete \"%s\"?", config.Name),
+				).WithWidth(45)
 			}
 		}
 	}
@@ -139,9 +140,9 @@ func (m ConfigListModel) View() string {
 
 	content := strings.Join(result, "\n")
 
-	// Overlay confirmation dialog if active
-	if m.confirmDelete {
-		content = m.overlayConfirmDialog(content)
+	// Overlay delete popup if active
+	if m.deletePopup != nil {
+		content = m.deletePopup.OverlayOnContent(content, m.width, len(result))
 	}
 
 	return content
@@ -280,117 +281,3 @@ func truncateURL(s string, maxLen int) string {
 	return "..." + s[len(s)-maxLen+3:]
 }
 
-func (m ConfigListModel) overlayConfirmDialog(content string) string {
-	lines := strings.Split(content, "\n")
-
-	// Dialog dimensions
-	dialogWidth := 40
-	dialogHeight := 5
-
-	// Center the dialog
-	startX := (m.width - dialogWidth) / 2
-	startY := (len(lines) - dialogHeight) / 2
-
-	if startX < 0 {
-		startX = 0
-	}
-	if startY < 0 {
-		startY = 0
-	}
-
-	// Get config name for the message
-	configName := ""
-	if m.deleteIndex < len(m.configs) {
-		configName = m.configs[m.deleteIndex].Name
-		if len(configName) > 20 {
-			configName = configName[:17] + "..."
-		}
-	}
-
-	// Build dialog lines
-	borderH := strings.Repeat(BorderTop, dialogWidth-2)
-	title := " Delete Config "
-	titlePadding := (dialogWidth - 2 - len(title)) / 2
-	topBorder := BorderTopLeft + strings.Repeat(BorderTop, titlePadding) + title + strings.Repeat(BorderTop, dialogWidth-2-titlePadding-len(title)) + BorderTopRight
-
-	// Question line - centered
-	question := fmt.Sprintf("Delete \"%s\"?", configName)
-	questionPadding := (dialogWidth - 2 - len(question)) / 2
-	if questionPadding < 0 {
-		questionPadding = 0
-	}
-	questionPadded := padToWidth(strings.Repeat(" ", questionPadding)+question, dialogWidth-2)
-
-	// Buttons - centered
-	yesBtn := "[ Yes ]"
-	noBtn := "[ No ]"
-	if m.confirmYes {
-		yesBtn = SelectedStyle.Render("[ Yes ]")
-		noBtn = GrayStyle.Render("[ No ]")
-	} else {
-		yesBtn = GrayStyle.Render("[ Yes ]")
-		noBtn = SelectedStyle.Render("[ No ]")
-	}
-	buttonsText := yesBtn + "   " + noBtn
-	buttonsWidth := lipgloss.Width(buttonsText)
-	buttonsPadding := (dialogWidth - 2 - buttonsWidth) / 2
-	if buttonsPadding < 0 {
-		buttonsPadding = 0
-	}
-	buttonsPadded := padToWidth(strings.Repeat(" ", buttonsPadding)+buttonsText, dialogWidth-2)
-
-	dialogLines := []string{
-		topBorder,
-		BorderLeft + strings.Repeat(" ", dialogWidth-2) + BorderRight,
-		BorderLeft + questionPadded + BorderRight,
-		BorderLeft + buttonsPadded + BorderRight,
-		BorderBottomLeft + borderH + BorderBottomRight,
-	}
-
-	// Overlay dialog onto content
-	for i, dialogLine := range dialogLines {
-		lineIdx := startY + i
-		if lineIdx >= 0 && lineIdx < len(lines) {
-			line := lines[lineIdx]
-			// Replace portion of line with dialog
-			newLine := m.insertDialogLine(line, dialogLine, startX, dialogWidth)
-			lines[lineIdx] = newLine
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func (m ConfigListModel) insertDialogLine(line, dialogLine string, startX, dialogWidth int) string {
-	// Convert to runes for proper handling
-	lineRunes := []rune(line)
-
-	// Ensure line is wide enough
-	for len(lineRunes) < startX+dialogWidth {
-		lineRunes = append(lineRunes, ' ')
-	}
-
-	// Simple approach: rebuild the line
-	// Note: This is simplified and may not handle ANSI codes perfectly
-	result := ""
-	lineWidth := lipgloss.Width(line)
-
-	// Pad line if needed
-	if lineWidth < startX {
-		result = line + strings.Repeat(" ", startX-lineWidth)
-		result += dialogLine
-	} else {
-		// We need to insert the dialog into the line
-		// For simplicity, we'll use a character-based approach
-		// This works best when the background has no ANSI codes at the insertion point
-		if startX < len(lineRunes) && startX+dialogWidth <= len(lineRunes) {
-			result = string(lineRunes[:startX]) + dialogLine + string(lineRunes[startX+dialogWidth:])
-		} else if startX < len(lineRunes) {
-			result = string(lineRunes[:startX]) + dialogLine
-		} else {
-			result = line + strings.Repeat(" ", startX-len(lineRunes)) + dialogLine
-		}
-	}
-
-	return result
-}

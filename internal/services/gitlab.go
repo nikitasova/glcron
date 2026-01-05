@@ -21,6 +21,8 @@ type GitLabServiceInterface interface {
 	UpdateSchedule(id int, req *models.ScheduleUpdateRequest) (*models.Schedule, error)
 	DeleteSchedule(id int) error
 	RunSchedule(id int) error
+	TakeOwnership(id int) (*models.Schedule, error)
+	GetCurrentUser() (*models.User, error)
 	GetBranches() ([]models.Branch, error)
 	CreateVariable(scheduleID int, variable *models.Variable) error
 	UpdateVariable(scheduleID int, variable *models.Variable) error
@@ -326,6 +328,48 @@ func (g *GitLabService) RunSchedule(id int) error {
 	}
 
 	return nil
+}
+
+// TakeOwnership takes ownership of a pipeline schedule
+func (g *GitLabService) TakeOwnership(id int) (*models.Schedule, error) {
+	resp, err := g.doRequest("POST", fmt.Sprintf("/api/v4/projects/%d/pipeline_schedules/%d/take_ownership", g.projectID, id), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to take ownership: %s - %s", resp.Status, string(body))
+	}
+
+	var schedule models.Schedule
+	if err := json.NewDecoder(resp.Body).Decode(&schedule); err != nil {
+		return nil, fmt.Errorf("failed to decode schedule: %v", err)
+	}
+
+	return &schedule, nil
+}
+
+// GetCurrentUser fetches the current authenticated user
+func (g *GitLabService) GetCurrentUser() (*models.User, error) {
+	resp, err := g.doRequest("GET", "/api/v4/user", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get current user: %s - %s", resp.Status, string(body))
+	}
+
+	var user models.User
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, fmt.Errorf("failed to decode user: %v", err)
+	}
+
+	return &user, nil
 }
 
 // GetBranches fetches all branches

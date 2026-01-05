@@ -47,6 +47,7 @@ type Model struct {
 	statusMsg         string
 	statusType        string
 	loading           bool
+	currentUser       *models.User
 
 	// Sub-models
 	configList   ConfigListModel
@@ -132,7 +133,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.schedules = msg.schedules
 		m.filteredSchedules = msg.schedules
 		m.branches = msg.branches
+		m.currentUser = msg.currentUser
 		m.scheduleList.SetItems(m.filteredSchedules)
+		m.scheduleList.SetCurrentUser(m.currentUser)
 		m.scheduleForm.SetBranches(m.branches)
 		m.loading = false
 		m.statusMsg = ""
@@ -187,6 +190,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case saveScheduleMsg:
 		return m.handleSaveSchedule(msg)
 
+	case saveScheduleWithOwnershipMsg:
+		return m.handleSaveScheduleWithOwnership(msg)
+
 	case createScheduleMsg:
 		return m.handleCreateSchedule(msg)
 
@@ -198,6 +204,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case runScheduleMsg:
 		return m.handleRunSchedule(msg)
+
+	case takeOwnershipMsg:
+		return m.handleTakeOwnership(msg)
+
+	case ownershipTakenMsg:
+		m.schedules = msg.schedules
+		m.filteredSchedules = msg.schedules
+		m.scheduleList.SetItems(m.filteredSchedules)
+		m.loading = false
+		m.statusMsg = "Ownership taken!"
+		m.statusType = "success"
+		return m, ClearStatusAfter(10 * time.Second)
 
 	case refreshSchedulesMsg:
 		return m.handleRefreshSchedules()
@@ -371,6 +389,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("d") + " Delete",
 			yellow.Render("r") + " Run Pipeline",
 			yellow.Render("A") + " Toggle",
+			yellow.Render("t") + " Take ownership",
 			yellow.Render("u") + " Update",
 			yellow.Render("o") + " Configs",
 			yellow.Render("q") + " Quit",
@@ -416,11 +435,12 @@ func (m Model) handleNavigation(msg navigateMsg) (tea.Model, tea.Cmd) {
 
 	case ScreenEditSchedule:
 		m.screen = ScreenEditSchedule
+		m.scheduleForm.SetCurrentUser(m.currentUser)
 		m.scheduleForm.SetSchedule(msg.schedule, m.branches, false)
 
 	case ScreenNewSchedule:
 		m.screen = ScreenNewSchedule
-		// m.scheduleForm.SetSchedule(nil, m.branches, true)
+		m.scheduleForm.SetCurrentUser(m.currentUser)
 		m.scheduleForm.SetSchedule(msg.schedule, m.branches, true)
 
 	case ScreenEditConfig:
@@ -464,10 +484,14 @@ func (m Model) handleSelectConfig(msg selectConfigMsg) (tea.Model, tea.Cmd) {
 			branchNames[i] = b.Name
 		}
 
+		// Get current user for ownership checks
+		currentUser, _ := gitlabService.GetCurrentUser()
+
 		return configSelectedMsg{
 			schedules:     schedules,
 			branches:      branchNames,
 			updatedConfig: &config, // Contains ProjectID from API
+			currentUser:   currentUser,
 		}
 	}
 }
@@ -494,6 +518,37 @@ func (m Model) handleSaveSchedule(msg saveScheduleMsg) (tea.Model, tea.Cmd) {
 
 		schedules, _ := gitlabService.GetSchedules()
 		return schedulesSavedMsg{schedules: schedules, message: "Schedule saved!"}
+	}
+}
+
+func (m Model) handleSaveScheduleWithOwnership(msg saveScheduleWithOwnershipMsg) (tea.Model, tea.Cmd) {
+	m.loading = true
+	m.statusMsg = "Taking ownership and saving..."
+	m.statusType = "warning"
+
+	gitlabService := m.gitlabService
+
+	return m, func() tea.Msg {
+		// First take ownership
+		if _, err := gitlabService.TakeOwnership(msg.id); err != nil {
+			return errMsg{err}
+		}
+
+		// Then update the schedule
+		req := &models.ScheduleUpdateRequest{
+			Description:  &msg.description,
+			Cron:         &msg.cron,
+			CronTimezone: &msg.timezone,
+			Ref:          &msg.branch,
+			Active:       &msg.active,
+		}
+
+		if _, err := gitlabService.UpdateSchedule(msg.id, req); err != nil {
+			return errMsg{err}
+		}
+
+		schedules, _ := gitlabService.GetSchedules()
+		return schedulesSavedMsg{schedules: schedules, message: "Ownership taken and schedule saved!"}
 	}
 }
 
@@ -589,6 +644,25 @@ func (m Model) handleRefreshSchedules() (tea.Model, tea.Cmd) {
 		return schedulesSavedMsg{schedules: schedules, message: "Schedules refreshed!"}
 	}
 }
+
+func (m Model) handleTakeOwnership(msg takeOwnershipMsg) (tea.Model, tea.Cmd) {
+	m.loading = true
+	m.statusMsg = "Taking ownership..."
+	m.statusType = "warning"
+
+	gitlabService := m.gitlabService
+
+	return m, func() tea.Msg {
+		schedule, err := gitlabService.TakeOwnership(msg.id)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		schedules, _ := gitlabService.GetSchedules()
+		return ownershipTakenMsg{schedule: schedule, schedules: schedules}
+	}
+}
+
 
 func (m Model) handleSaveConfig(msg saveConfigMsg) (tea.Model, tea.Cmd) {
 	m.loading = true
