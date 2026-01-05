@@ -420,6 +420,19 @@ func (m ScheduleListModel) renderDetailsPanel(width int) []string {
 			}
 		}
 		content = append(content, "  "+pipelineStatus)
+		if s.LastPipeline != nil && s.LastPipeline.WebURL != "" {
+			content = append(content, "")
+			urlMaxWidth := width - 12
+			url := s.LastPipeline.WebURL
+			for len(url) > 0 {
+				lineLen := urlMaxWidth
+				if lineLen > len(url) {
+					lineLen = len(url)
+				}
+				content = append(content, "  "+blue.Render(url[:lineLen]))
+				url = url[lineLen:]
+			}
+		}
 		content = append(content, "")
 
 		content = append(content, label.Render("Variables"))

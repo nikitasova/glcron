@@ -185,11 +185,12 @@ func (g *GitLabService) GetSchedules() ([]models.Schedule, error) {
 		return nil, fmt.Errorf("failed to decode schedules: %v", err)
 	}
 
-	// Fetch details for each schedule to get variables
+	// Fetch details for each schedule to get variables and last pipeline
 	for i := range schedules {
 		details, err := g.GetSchedule(schedules[i].ID)
 		if err == nil {
 			schedules[i].Variables = details.Variables
+			schedules[i].LastPipeline = details.LastPipeline
 		}
 	}
 
