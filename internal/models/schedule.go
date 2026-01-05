@@ -27,6 +27,16 @@ type Owner struct {
 	WebURL    string `json:"web_url"`
 }
 
+// User represents the current GitLab user
+type User struct {
+	ID        int    `json:"id"`
+	Username  string `json:"username"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	AvatarURL string `json:"avatar_url"`
+	WebURL    string `json:"web_url"`
+}
+
 // Pipeline represents the last pipeline status
 type Pipeline struct {
 	ID     int    `json:"id"`

@@ -29,6 +29,7 @@ type configSelectedMsg struct {
 	schedules     []models.Schedule
 	branches      []string
 	updatedConfig *models.Config
+	currentUser   *models.User
 }
 
 type schedulesSavedMsg struct {
@@ -85,6 +86,16 @@ type saveScheduleMsg struct {
 	variables   []models.Variable
 }
 
+type saveScheduleWithOwnershipMsg struct {
+	id          int
+	description string
+	cron        string
+	timezone    string
+	branch      string
+	active      bool
+	variables   []models.Variable
+}
+
 type createScheduleMsg struct {
 	description string
 	cron        string
@@ -105,6 +116,15 @@ type toggleScheduleMsg struct {
 
 type runScheduleMsg struct {
 	id int
+}
+
+type takeOwnershipMsg struct {
+	id int
+}
+
+type ownershipTakenMsg struct {
+	schedule  *models.Schedule
+	schedules []models.Schedule
 }
 
 type refreshSchedulesMsg struct{}

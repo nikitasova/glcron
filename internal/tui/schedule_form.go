@@ -48,6 +48,11 @@ type ScheduleFormModel struct {
 	popupType    string
 	popupCursor  int
 	popupOptions []string
+
+	// Ownership
+	currentUser    *models.User
+	scheduleOwner  models.Owner
+	ownershipPopup *ConfirmPopup
 }
 
 func NewScheduleFormModel() ScheduleFormModel {
@@ -84,9 +89,21 @@ func (m *ScheduleFormModel) SetBranches(branches []string) {
 	m.branches = branches
 }
 
+func (m *ScheduleFormModel) SetCurrentUser(user *models.User) {
+	m.currentUser = user
+}
+
+func (m *ScheduleFormModel) isOwner() bool {
+	if m.currentUser == nil {
+		return false
+	}
+	return m.currentUser.ID == m.scheduleOwner.ID
+}
+
 func (m *ScheduleFormModel) SetSchedule(schedule *models.Schedule, branches []string, isNew bool) {
 	m.isNew = isNew
 	m.branches = branches
+	m.ownershipPopup = nil
 
 	if schedule != nil {
 		m.scheduleID = schedule.ID
@@ -97,6 +114,7 @@ func (m *ScheduleFormModel) SetSchedule(schedule *models.Schedule, branches []st
 		m.active = schedule.Active
 		m.variables = make([]models.Variable, len(schedule.Variables))
 		copy(m.variables, schedule.Variables)
+		m.scheduleOwner = schedule.Owner
 	} else {
 		m.scheduleID = 0
 		m.descInput.SetValue("")
@@ -105,6 +123,7 @@ func (m *ScheduleFormModel) SetSchedule(schedule *models.Schedule, branches []st
 		m.branch = "main"
 		m.active = true
 		m.variables = []models.Variable{}
+		m.scheduleOwner = models.Owner{}
 	}
 
 	for i, tz := range services.CommonTimezones {
@@ -145,6 +164,29 @@ func (m *ScheduleFormModel) rebuildVarInputs() {
 func (m ScheduleFormModel) Update(msg tea.Msg) (ScheduleFormModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle ownership confirmation popup
+		if m.ownershipPopup != nil {
+			switch msg.String() {
+			case "left", "h":
+				m.ownershipPopup.SelectYes()
+			case "right", "l":
+				m.ownershipPopup.SelectNo()
+			case "y", "Y":
+				m.ownershipPopup = nil
+				return m.saveWithOwnership()
+			case "n", "N", "esc":
+				m.ownershipPopup = nil
+			case "enter":
+				if m.ownershipPopup.IsYesSelected() {
+					m.ownershipPopup = nil
+					return m.saveWithOwnership()
+				} else {
+					m.ownershipPopup = nil
+				}
+			}
+			return m, nil
+		}
+
 		if m.showingPopup {
 			return m.handlePopupKey(msg)
 		}
@@ -362,6 +404,30 @@ func (m *ScheduleFormModel) updateVariablesFromInputs() {
 }
 
 func (m ScheduleFormModel) save() (ScheduleFormModel, tea.Cmd) {
+	// For new schedules, no ownership check needed
+	if m.isNew {
+		return m.doSave()
+	}
+
+	// For existing schedules, check ownership
+	if !m.isOwner() {
+		ownerName := "another user"
+		if m.scheduleOwner.Username != "" {
+			ownerName = "@" + m.scheduleOwner.Username
+		}
+		m.ownershipPopup = NewConfirmPopup(
+			"Take Ownership",
+			"This schedule is owned by "+ownerName+".",
+			"",
+			"Take ownership to save changes?",
+		).WithButtons("Yes, Take Ownership", "Cancel").WithWidth(55)
+		return m, nil
+	}
+
+	return m.doSave()
+}
+
+func (m ScheduleFormModel) doSave() (ScheduleFormModel, tea.Cmd) {
 	var vars []models.Variable
 	for _, input := range m.varInputs {
 		val := input.Value()
@@ -399,14 +465,44 @@ func (m ScheduleFormModel) save() (ScheduleFormModel, tea.Cmd) {
 	}
 }
 
+func (m ScheduleFormModel) saveWithOwnership() (ScheduleFormModel, tea.Cmd) {
+	var vars []models.Variable
+	for _, input := range m.varInputs {
+		val := input.Value()
+		if val != "" {
+			key, value := parseKeyValue(val)
+			if key != "" {
+				vars = append(vars, models.Variable{Key: key, Value: value, VariableType: "env_var"})
+			}
+		}
+	}
+
+	return m, func() tea.Msg {
+		return saveScheduleWithOwnershipMsg{
+			id:          m.scheduleID,
+			description: m.descInput.Value(),
+			cron:        m.cronInput.Value(),
+			timezone:    m.timezone,
+			branch:      m.branch,
+			active:      m.active,
+			variables:   vars,
+		}
+	}
+}
+
 func (m ScheduleFormModel) View() string {
+	// Show ownership popup as full screen if active
+	if m.ownershipPopup != nil {
+		return m.ownershipPopup.View(m.width, m.height)
+	}
+
 	leftWidth := (m.width * 3) / 5
 	rightWidth := m.width - leftWidth - 1
 
 	leftLines := m.renderFormPanel(leftWidth)
 	rightLines := m.renderHelpPanel(rightWidth)
 
-	// If popup is showing, overlay it
+	// If dropdown popup is showing, overlay it
 	if m.showingPopup {
 		return m.renderWithPopup(leftLines, rightLines, leftWidth, rightWidth)
 	}

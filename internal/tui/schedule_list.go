@@ -19,9 +19,15 @@ type ScheduleListModel struct {
 	height        int
 	search        textinput.Model
 	searching     bool
-	confirmDelete bool // showing delete confirmation dialog
-	confirmYes    bool // true = Yes selected, false = No selected
-	deleteID      int  // ID of schedule to delete
+
+	// Delete confirmation
+	deletePopup *ConfirmPopup
+	deleteID    int
+
+	// Ownership
+	currentUser       *models.User
+	takeOwnershipPopup *ConfirmPopup
+	takeOwnershipID    int
 }
 
 func NewScheduleListModel() ScheduleListModel {
@@ -51,34 +57,74 @@ func (m *ScheduleListModel) SetItems(schedules []models.Schedule) {
 	}
 }
 
+func (m *ScheduleListModel) SetCurrentUser(user *models.User) {
+	m.currentUser = user
+}
+
+// isOwner checks if the current user owns the given schedule
+func (m *ScheduleListModel) isOwner(schedule *models.Schedule) bool {
+	if m.currentUser == nil || schedule == nil {
+		return false
+	}
+	return m.currentUser.ID == schedule.Owner.ID
+}
+
 func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle confirmation dialog
-		if m.confirmDelete {
+		// Handle take ownership popup
+		if m.takeOwnershipPopup != nil {
 			switch msg.String() {
 			case "left", "h":
-				m.confirmYes = true
+				m.takeOwnershipPopup.SelectYes()
 			case "right", "l":
-				m.confirmYes = false
+				m.takeOwnershipPopup.SelectNo()
 			case "y", "Y":
-				m.confirmYes = true
-				m.confirmDelete = false
+				m.takeOwnershipPopup = nil
+				id := m.takeOwnershipID
 				return m, func() tea.Msg {
-					return deleteScheduleMsg{id: m.deleteID}
+					return takeOwnershipMsg{id: id}
 				}
 			case "n", "N", "esc":
-				m.confirmDelete = false
-				m.confirmYes = true // reset to default
+				m.takeOwnershipPopup = nil
 			case "enter":
-				if m.confirmYes {
-					m.confirmDelete = false
+				if m.takeOwnershipPopup.IsYesSelected() {
+					m.takeOwnershipPopup = nil
+					id := m.takeOwnershipID
 					return m, func() tea.Msg {
-						return deleteScheduleMsg{id: m.deleteID}
+						return takeOwnershipMsg{id: id}
 					}
 				} else {
-					m.confirmDelete = false
-					m.confirmYes = true // reset to default
+					m.takeOwnershipPopup = nil
+				}
+			}
+			return m, nil
+		}
+
+		// Handle delete popup
+		if m.deletePopup != nil {
+			switch msg.String() {
+			case "left", "h":
+				m.deletePopup.SelectYes()
+			case "right", "l":
+				m.deletePopup.SelectNo()
+			case "y", "Y":
+				m.deletePopup = nil
+				id := m.deleteID
+				return m, func() tea.Msg {
+					return deleteScheduleMsg{id: id}
+				}
+			case "n", "N", "esc":
+				m.deletePopup = nil
+			case "enter":
+				if m.deletePopup.IsYesSelected() {
+					m.deletePopup = nil
+					id := m.deleteID
+					return m, func() tea.Msg {
+						return deleteScheduleMsg{id: id}
+					}
+				} else {
+					m.deletePopup = nil
 				}
 			}
 			return m, nil
@@ -123,9 +169,11 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 		case "d":
 			if m.cursor < len(m.filtered) {
 				schedule := m.filtered[m.cursor]
-				m.confirmDelete = true
-				m.confirmYes = true // Yes selected by default
 				m.deleteID = schedule.ID
+				m.deletePopup = NewConfirmPopup(
+					"Delete Schedule",
+					fmt.Sprintf("Delete \"%s\"?", schedule.Description),
+				).WithWidth(50)
 			}
 		case "A":
 			if m.cursor < len(m.filtered) {
@@ -158,6 +206,24 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 				schedule := &m.filtered[m.cursor]
 				return m, NavigateToYonk(schedule)
 			}
+		case "t":
+			// Take ownership - show confirmation popup
+			if m.cursor < len(m.filtered) {
+				schedule := m.filtered[m.cursor]
+				if !m.isOwner(&schedule) {
+					m.takeOwnershipID = schedule.ID
+					ownerName := "another user"
+					if schedule.Owner.Username != "" {
+						ownerName = "@" + schedule.Owner.Username
+					}
+					m.takeOwnershipPopup = NewConfirmPopup(
+						"Take Ownership",
+						fmt.Sprintf("This schedule is owned by %s.", ownerName),
+						"",
+						"Take ownership of this schedule?",
+					).WithButtons("Yes, Take Ownership", "Cancel").WithWidth(55)
+				}
+			}
 		}
 	}
 
@@ -184,6 +250,14 @@ func (m *ScheduleListModel) filterSchedules() {
 }
 
 func (m ScheduleListModel) View() string {
+	// Show popup as full screen if active
+	if m.deletePopup != nil {
+		return m.deletePopup.View(m.width, m.height)
+	}
+	if m.takeOwnershipPopup != nil {
+		return m.takeOwnershipPopup.View(m.width, m.height)
+	}
+
 	// Split into left (2/3) and right (1/3) columns
 	leftWidth := (m.width * 2) / 3
 	rightWidth := m.width - leftWidth - 1
@@ -210,14 +284,7 @@ func (m ScheduleListModel) View() string {
 		result = append(result, left+"│"+right)
 	}
 
-	content := strings.Join(result, "\n")
-
-	// Overlay confirmation dialog if active
-	if m.confirmDelete {
-		content = m.overlayConfirmDialog(content)
-	}
-
-	return content
+	return strings.Join(result, "\n")
 }
 
 func (m ScheduleListModel) renderLeftColumn(width int) []string {
@@ -450,7 +517,11 @@ func (m ScheduleListModel) renderDetailsPanel(width int) []string {
 		if s.Owner.Username != "" {
 			ownerInfo = fmt.Sprintf("%s (@%s)", s.Owner.Name, s.Owner.Username)
 		}
-		content = append(content, "  "+ownerInfo)
+		if m.isOwner(&s) {
+			content = append(content, "  "+green.Render(ownerInfo+" (you)"))
+		} else {
+			content = append(content, "  "+ownerInfo)
+		}
 	}
 
 	for _, line := range content {
@@ -517,142 +588,3 @@ func formatDetailTime(t time.Time) string {
 	return fmt.Sprintf("in %d days", days)
 }
 
-func (m ScheduleListModel) overlayConfirmDialog(content string) string {
-	lines := strings.Split(content, "\n")
-
-	// Dialog dimensions
-	dialogWidth := 50
-	contentWidth := dialogWidth - 4 // Account for borders and padding
-
-	// Get schedule description for the message
-	scheduleName := ""
-	for _, s := range m.filtered {
-		if s.ID == m.deleteID {
-			scheduleName = s.Description
-			break
-		}
-	}
-
-	// Wrap the description if too long
-	var descLines []string
-	question := fmt.Sprintf("Delete \"%s\"?", scheduleName)
-	if len(question) <= contentWidth {
-		descLines = append(descLines, question)
-	} else {
-		// Wrap the description - first add "Delete?" then the name on separate lines
-		descLines = append(descLines, "Delete?")
-		descLines = append(descLines, "") // gap
-		remaining := scheduleName
-		for len(remaining) > 0 {
-			lineLen := contentWidth
-			if lineLen > len(remaining) {
-				lineLen = len(remaining)
-			}
-			descLines = append(descLines, remaining[:lineLen])
-			remaining = remaining[lineLen:]
-		}
-	}
-
-	// Calculate dialog height based on content
-	dialogHeight := 4 + len(descLines) // top border + empty line + desc lines + buttons + bottom border
-
-	// Center the dialog
-	startX := (m.width - dialogWidth) / 2
-	startY := (len(lines) - dialogHeight) / 2
-
-	if startX < 0 {
-		startX = 0
-	}
-	if startY < 0 {
-		startY = 0
-	}
-
-	// Build dialog lines
-	borderH := strings.Repeat(BorderTop, dialogWidth-2)
-	title := " Delete Schedule "
-	titlePadding := (dialogWidth - 2 - len(title)) / 2
-	topBorder := BorderTopLeft + strings.Repeat(BorderTop, titlePadding) + title + strings.Repeat(BorderTop, dialogWidth-2-titlePadding-len(title)) + BorderTopRight
-
-	// Buttons - centered
-	yesBtn := "[ Yes ]"
-	noBtn := "[ No ]"
-	if m.confirmYes {
-		yesBtn = SelectedStyle.Render("[ Yes ]")
-		noBtn = GrayStyle.Render("[ No ]")
-	} else {
-		yesBtn = GrayStyle.Render("[ Yes ]")
-		noBtn = SelectedStyle.Render("[ No ]")
-	}
-	buttonsText := yesBtn + "   " + noBtn
-	buttonsWidth := lipgloss.Width(buttonsText)
-	buttonsPadding := (dialogWidth - 2 - buttonsWidth) / 2
-	if buttonsPadding < 0 {
-		buttonsPadding = 0
-	}
-	buttonsPadded := padToWidth(strings.Repeat(" ", buttonsPadding)+buttonsText, dialogWidth-2)
-
-	var dialogLines []string
-	dialogLines = append(dialogLines, topBorder)
-	dialogLines = append(dialogLines, BorderLeft+strings.Repeat(" ", dialogWidth-2)+BorderRight)
-
-	// Add description lines (centered)
-	for _, descLine := range descLines {
-		descPadding := (dialogWidth - 2 - len(descLine)) / 2
-		if descPadding < 0 {
-			descPadding = 0
-		}
-		descPadded := padToWidth(strings.Repeat(" ", descPadding)+descLine, dialogWidth-2)
-		dialogLines = append(dialogLines, BorderLeft+descPadded+BorderRight)
-	}
-
-	dialogLines = append(dialogLines, BorderLeft+strings.Repeat(" ", dialogWidth-2)+BorderRight)
-	dialogLines = append(dialogLines, BorderLeft+buttonsPadded+BorderRight)
-	dialogLines = append(dialogLines, BorderBottomLeft+borderH+BorderBottomRight)
-
-	// Overlay dialog onto content
-	for i, dialogLine := range dialogLines {
-		lineIdx := startY + i
-		if lineIdx >= 0 && lineIdx < len(lines) {
-			line := lines[lineIdx]
-			// Replace portion of line with dialog
-			newLine := m.insertDialogLine(line, dialogLine, startX, dialogWidth)
-			lines[lineIdx] = newLine
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func (m ScheduleListModel) insertDialogLine(line, dialogLine string, startX, dialogWidth int) string {
-	// Convert to runes for proper handling
-	lineRunes := []rune(line)
-
-	// Ensure line is wide enough
-	for len(lineRunes) < startX+dialogWidth {
-		lineRunes = append(lineRunes, ' ')
-	}
-
-	// Simple approach: rebuild the line
-	// Note: This is simplified and may not handle ANSI codes perfectly
-	result := ""
-	lineWidth := lipgloss.Width(line)
-
-	// Pad line if needed
-	if lineWidth < startX {
-		result = line + strings.Repeat(" ", startX-lineWidth)
-		result += dialogLine
-	} else {
-		// We need to insert the dialog into the line
-		// For simplicity, we'll use a character-based approach
-		// This works best when the background has no ANSI codes at the insertion point
-		if startX < len(lineRunes) && startX+dialogWidth <= len(lineRunes) {
-			result = string(lineRunes[:startX]) + dialogLine + string(lineRunes[startX+dialogWidth:])
-		} else if startX < len(lineRunes) {
-			result = string(lineRunes[:startX]) + dialogLine
-		} else {
-			result = line + strings.Repeat(" ", startX-len(lineRunes)) + dialogLine
-		}
-	}
-
-	return result
-}
