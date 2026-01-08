@@ -39,11 +39,46 @@ type User struct {
 
 // Pipeline represents the last pipeline status
 type Pipeline struct {
-	ID     int    `json:"id"`
-	SHA    string `json:"sha"`
-	Ref    string `json:"ref"`
-	Status string `json:"status"` // "success", "failed", "pending", "running", "canceled"
-	WebURL string `json:"web_url"`
+	ID        int        `json:"id"`
+	SHA       string     `json:"sha"`
+	Ref       string     `json:"ref"`
+	Status    string     `json:"status"` // "success", "failed", "pending", "running", "canceled"
+	WebURL    string     `json:"web_url"`
+	Source    string     `json:"source"`    // "push", "web", "trigger", "schedule", etc.
+	CreatedAt *time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+	User      *User      `json:"user"`
+}
+
+// PipelineJob represents a job in a pipeline
+type PipelineJob struct {
+	ID        int        `json:"id"`
+	Name      string     `json:"name"`
+	Stage     string     `json:"stage"`
+	Status    string     `json:"status"` // "success", "failed", "pending", "running", "canceled", "skipped"
+	CreatedAt *time.Time `json:"created_at"`
+	StartedAt *time.Time `json:"started_at"`
+	Duration  float64    `json:"duration"`
+	WebURL    string     `json:"web_url"`
+}
+
+// PipelineWithJobs represents a pipeline with its jobs for display
+type PipelineWithJobs struct {
+	Pipeline Pipeline
+	Jobs     []PipelineJob
+	Stages   []StageInfo
+}
+
+// StageInfo represents aggregated stage information
+type StageInfo struct {
+	Name   string
+	Status string
+}
+
+// PipelineCreateRequest represents a request to create a pipeline
+type PipelineCreateRequest struct {
+	Ref       string     `json:"ref"`
+	Variables []Variable `json:"variables,omitempty"`
 }
 
 // Variable represents a pipeline schedule variable

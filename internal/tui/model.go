@@ -27,6 +27,7 @@ const (
 	ScreenNewSchedule
 	ScreenEditConfig
 	ScreenNewConfig
+	ScreenQuickRun
 )
 
 // Model is the main application model
@@ -54,6 +55,7 @@ type Model struct {
 	scheduleList ScheduleListModel
 	scheduleForm ScheduleFormModel
 	configForm   ConfigFormModel
+	quickRun     QuickRunModel
 }
 
 // NewModel creates a new application model
@@ -73,6 +75,7 @@ func NewModel() Model {
 	m.scheduleList = NewScheduleListModel()
 	m.scheduleForm = NewScheduleFormModel()
 	m.configForm = NewConfigFormModel()
+	m.quickRun = NewQuickRunModel()
 
 	return m
 }
@@ -112,6 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scheduleList.SetSize(m.width-2, contentHeight)
 		m.scheduleForm.SetSize(m.width-2, contentHeight)
 		m.configForm.SetSize(m.width-2, contentHeight)
+		m.quickRun.SetSize(m.width-2, contentHeight)
 
 	case configsLoadedMsg:
 		m.configs = msg.configs
@@ -228,6 +232,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case selectConfigMsg:
 		return m.handleSelectConfig(msg)
+
+	case quickRunPipelineMsg:
+		return m.handleQuickRunPipeline(msg)
+
+	case pipelineCreatedMsg:
+		m.loading = false
+		m.statusMsg = "Pipeline started!"
+		m.statusType = "success"
+		// Refresh pipelines list
+		return m, tea.Batch(
+			ClearStatusAfter(5*time.Second),
+			m.loadPipelinesCmd(),
+		)
+
+	case pipelinesLoadedMsg:
+		m.quickRun.SetPipelines(msg.pipelines)
+		// If any pipeline is running, schedule another refresh
+		for _, p := range msg.pipelines {
+			if p.Pipeline.Status == "running" || p.Pipeline.Status == "pending" {
+				return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+					return refreshPipelinesMsg{}
+				})
+			}
+		}
+
+	case refreshPipelinesMsg:
+		if m.screen == ScreenQuickRun {
+			return m, m.loadPipelinesCmd()
+		}
+
+	case pipelineTickMsg:
+		if m.screen == ScreenQuickRun {
+			return m, m.loadPipelinesCmd()
+		}
 	}
 
 	switch m.screen {
@@ -249,6 +287,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenEditConfig, ScreenNewConfig:
 		var cmd tea.Cmd
 		m.configForm, cmd = m.configForm.Update(msg)
+		cmds = append(cmds, cmd)
+
+	case ScreenQuickRun:
+		var cmd tea.Cmd
+		m.quickRun, cmd = m.quickRun.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -283,6 +326,8 @@ func (m Model) renderGrid() string {
 		content = m.scheduleForm.View()
 	case ScreenEditConfig, ScreenNewConfig:
 		content = m.configForm.View()
+	case ScreenQuickRun:
+		content = m.quickRun.View()
 	}
 
 	// Footer content (legend)
@@ -388,6 +433,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("y") + " Yonk",
 			yellow.Render("d") + " Delete",
 			yellow.Render("r") + " Run Pipeline",
+			yellow.Render("R") + " Quick Run",
 			yellow.Render("A") + " Toggle",
 			yellow.Render("t") + " Take ownership",
 			yellow.Render("u") + " Update",
@@ -407,6 +453,14 @@ func (m Model) renderLegend() string {
 			yellow.Render("Tab") + " Next",
 			yellow.Render("Ctrl+S") + " Save",
 			yellow.Render("Esc") + " Cancel",
+		}
+	case ScreenQuickRun:
+		items = []string{
+			yellow.Render("R") + " New Run",
+			yellow.Render("u") + " Update",
+			yellow.Render("↑↓") + " Navigate",
+			yellow.Render("Esc") + " Back",
+			yellow.Render("q") + " Quit",
 		}
 	}
 
@@ -450,6 +504,13 @@ func (m Model) handleNavigation(msg navigateMsg) (tea.Model, tea.Cmd) {
 	case ScreenNewConfig:
 		m.screen = ScreenNewConfig
 		m.configForm.SetConfig(nil, -1, true)
+
+	case ScreenQuickRun:
+		m.screen = ScreenQuickRun
+		m.quickRun.SetBranches(m.branches)
+		m.quickRun.Reset()
+		// Load pipelines
+		return m, m.loadPipelinesCmd()
 	}
 
 	return m, nil
@@ -723,6 +784,107 @@ func (m Model) handleDeleteConfig(msg deleteConfigMsg) (tea.Model, tea.Cmd) {
 		configFile, _ := configService.Load()
 		return configSavedMsg{configs: configFile.Configs, message: "Configuration deleted!"}
 	}
+}
+
+func (m Model) handleQuickRunPipeline(msg quickRunPipelineMsg) (tea.Model, tea.Cmd) {
+	m.loading = true
+	m.statusMsg = "Starting pipeline..."
+	m.statusType = "warning"
+
+	gitlabService := m.gitlabService
+
+	return m, func() tea.Msg {
+		req := &models.PipelineCreateRequest{
+			Ref:       msg.branch,
+			Variables: msg.variables,
+		}
+
+		pipeline, err := gitlabService.CreatePipeline(req)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return pipelineCreatedMsg{pipeline: pipeline}
+	}
+}
+
+func (m Model) loadPipelinesCmd() tea.Cmd {
+	gitlabService := m.gitlabService
+
+	return func() tea.Msg {
+		pipelines, err := gitlabService.GetPipelines(QuickRunPipelinesListLimit)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		// Load jobs for each pipeline to get stage info
+		var pipelinesWithJobs []models.PipelineWithJobs
+		for _, p := range pipelines {
+			jobs, _ := gitlabService.GetPipelineJobs(p.ID)
+
+			// Aggregate stages from jobs
+			stageMap := make(map[string]string) // stage name -> status
+			stageOrder := []string{}
+			for _, job := range jobs {
+				if _, exists := stageMap[job.Stage]; !exists {
+					stageOrder = append(stageOrder, job.Stage)
+					stageMap[job.Stage] = job.Status
+				} else {
+					// Update status if this job has a "worse" status
+					currentStatus := stageMap[job.Stage]
+					if shouldUpdateStageStatus(currentStatus, job.Status) {
+						stageMap[job.Stage] = job.Status
+					}
+				}
+			}
+
+			// Reverse stage order (GitLab API returns jobs in reverse order)
+			for i, j := 0, len(stageOrder)-1; i < j; i, j = i+1, j-1 {
+				stageOrder[i], stageOrder[j] = stageOrder[j], stageOrder[i]
+			}
+
+			var stages []models.StageInfo
+			for _, stageName := range stageOrder {
+				stages = append(stages, models.StageInfo{
+					Name:   stageName,
+					Status: stageMap[stageName],
+				})
+			}
+
+			pipelinesWithJobs = append(pipelinesWithJobs, models.PipelineWithJobs{
+				Pipeline: p,
+				Jobs:     jobs,
+				Stages:   stages,
+			})
+		}
+
+		return pipelinesLoadedMsg{pipelines: pipelinesWithJobs}
+	}
+}
+
+// shouldUpdateStageStatus returns true if newStatus should replace currentStatus
+func shouldUpdateStageStatus(currentStatus, newStatus string) bool {
+	// Priority: failed > running > pending > success > skipped > canceled
+	priority := map[string]int{
+		"failed":   6,
+		"running":  5,
+		"pending":  4,
+		"success":  3,
+		"skipped":  2,
+		"canceled": 1,
+		"manual":   0,
+	}
+
+	currentPriority, ok1 := priority[currentStatus]
+	newPriority, ok2 := priority[newStatus]
+
+	if !ok1 {
+		return true
+	}
+	if !ok2 {
+		return false
+	}
+	return newPriority > currentPriority
 }
 
 // Helper functions

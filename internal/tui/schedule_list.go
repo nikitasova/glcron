@@ -224,6 +224,9 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 					).WithButtons("Yes, Take Ownership", "Cancel").WithWidth(55)
 				}
 			}
+		case "R":
+			// Quick Run - open pipeline run screen
+			return m, Navigate(ScreenQuickRun)
 		}
 	}
 
