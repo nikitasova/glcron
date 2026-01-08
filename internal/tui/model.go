@@ -56,6 +56,7 @@ type Model struct {
 	scheduleForm ScheduleFormModel
 	configForm   ConfigFormModel
 	quickRun     QuickRunModel
+	help         HelpModel
 }
 
 // NewModel creates a new application model
@@ -76,6 +77,7 @@ func NewModel() Model {
 	m.scheduleForm = NewScheduleFormModel()
 	m.configForm = NewConfigFormModel()
 	m.quickRun = NewQuickRunModel()
+	m.help = NewHelpModel()
 	m.log = NewLogPanel()
 
 	return m
@@ -101,11 +103,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle help screen
+		if m.help.IsVisible() {
+			switch msg.String() {
+			case "h", "esc", "q":
+				m.help.Hide()
+				return m, nil
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.screen == ScreenConfigList {
 				return m, tea.Quit
 			}
+		case "h":
+			// Show help for current screen
+			m.help.Show(m.screen)
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
@@ -117,6 +133,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scheduleForm.SetSize(m.width-2, contentHeight)
 		m.configForm.SetSize(m.width-2, contentHeight)
 		m.quickRun.SetSize(m.width-2, contentHeight)
+		m.help.SetSize(m.width-2, contentHeight)
 
 	case configsLoadedMsg:
 		m.configs = msg.configs
@@ -311,17 +328,21 @@ func (m Model) renderGrid() string {
 
 	// Main content based on current screen
 	var content string
-	switch m.screen {
-	case ScreenConfigList:
-		content = m.configList.View()
-	case ScreenScheduleList:
-		content = m.scheduleList.View()
-	case ScreenEditSchedule, ScreenNewSchedule:
-		content = m.scheduleForm.View()
-	case ScreenEditConfig, ScreenNewConfig:
-		content = m.configForm.View()
-	case ScreenQuickRun:
-		content = m.quickRun.View()
+	if m.help.IsVisible() {
+		content = m.help.View()
+	} else {
+		switch m.screen {
+		case ScreenConfigList:
+			content = m.configList.View()
+		case ScreenScheduleList:
+			content = m.scheduleList.View()
+		case ScreenEditSchedule, ScreenNewSchedule:
+			content = m.scheduleForm.View()
+		case ScreenEditConfig, ScreenNewConfig:
+			content = m.configForm.View()
+		case ScreenQuickRun:
+			content = m.quickRun.View()
+		}
 	}
 
 	// Footer content (legend)
@@ -406,6 +427,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("c") + " Create",
 			yellow.Render("e") + " Edit",
 			yellow.Render("d") + " Delete",
+			yellow.Render("h") + " Help",
 			yellow.Render("q") + " Quit",
 		}
 	case ScreenScheduleList:
@@ -422,6 +444,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("t") + " Take ownership",
 			yellow.Render("u") + " Update",
 			yellow.Render("o") + " Configs",
+			yellow.Render("h") + " Help",
 			yellow.Render("q") + " Quit",
 		}
 	case ScreenEditSchedule, ScreenNewSchedule:
@@ -429,6 +452,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("↑↓") + " Navigate",
 			yellow.Render("Enter") + " Select/Toggle",
 			yellow.Render("Ctrl+S") + " Save",
+			yellow.Render("h") + " Help",
 			yellow.Render("Esc") + " Cancel",
 		}
 	case ScreenEditConfig, ScreenNewConfig:
@@ -436,6 +460,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("↑↓") + " Navigate",
 			yellow.Render("Tab") + " Next",
 			yellow.Render("Ctrl+S") + " Save",
+			yellow.Render("h") + " Help",
 			yellow.Render("Esc") + " Cancel",
 		}
 	case ScreenQuickRun:
@@ -443,6 +468,7 @@ func (m Model) renderLegend() string {
 			yellow.Render("R") + " New Run",
 			yellow.Render("u") + " Update",
 			yellow.Render("↑↓") + " Navigate",
+			yellow.Render("h") + " Help",
 			yellow.Render("Esc") + " Back",
 			yellow.Render("q") + " Quit",
 		}

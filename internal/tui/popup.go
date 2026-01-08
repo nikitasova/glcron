@@ -363,4 +363,3 @@ func (p *SelectPopup) RenderOverlay(bgLines []string, startX, startY int) []stri
 
 	return result
 }
-

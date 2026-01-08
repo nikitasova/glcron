@@ -49,7 +49,8 @@ type QuickRunModel struct {
 	focusedVarIdx int
 
 	// Popup state
-	branchPopup *SelectPopup
+	showingPopup bool
+	popupCursor  int
 
 	// Pipeline list
 	pipelines        []models.PipelineWithJobs
@@ -126,7 +127,7 @@ func (m *QuickRunModel) rebuildVarInputs() {
 
 func (m *QuickRunModel) Reset() {
 	m.showingForm = false
-	m.branchPopup = nil
+	m.showingPopup = false
 	m.focusedField = QuickRunFieldBranch
 	m.selectedPipeline = 0
 	m.scrollOffset = 0
@@ -167,7 +168,7 @@ func (m *QuickRunModel) ShowForm() {
 func (m QuickRunModel) Update(msg tea.Msg) (QuickRunModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if m.branchPopup != nil {
+		if m.showingPopup {
 			return m.handlePopupKey(msg)
 		}
 
@@ -205,20 +206,21 @@ func (m QuickRunModel) Update(msg tea.Msg) (QuickRunModel, tea.Cmd) {
 }
 
 func (m QuickRunModel) handlePopupKey(msg tea.KeyMsg) (QuickRunModel, tea.Cmd) {
-	if m.branchPopup == nil {
-		return m, nil
-	}
 	switch msg.String() {
 	case "esc":
-		m.branchPopup = nil
+		m.showingPopup = false
 	case "up", "k":
-		m.branchPopup.MoveUp()
+		if m.popupCursor > 0 {
+			m.popupCursor--
+		}
 	case "down", "j":
-		m.branchPopup.MoveDown()
+		if m.popupCursor < len(m.branches)-1 {
+			m.popupCursor++
+		}
 	case "enter":
-		m.branch = m.branchPopup.Selected()
-		m.branchIdx = m.branchPopup.SelectedIndex()
-		m.branchPopup = nil
+		m.showingPopup = false
+		m.branch = m.branches[m.popupCursor]
+		m.branchIdx = m.popupCursor
 	}
 	return m, nil
 }
@@ -308,8 +310,8 @@ func (m *QuickRunModel) focusCurrent() {
 func (m QuickRunModel) handleEnter() (QuickRunModel, tea.Cmd) {
 	switch m.focusedField {
 	case QuickRunFieldBranch:
-		m.branchPopup = NewSelectPopup("Select Branch", m.branches).WithWidth(50).WithVisibleItems(12)
-		m.branchPopup.SetCursor(m.branchIdx)
+		m.showingPopup = true
+		m.popupCursor = m.branchIdx
 	case QuickRunFieldVariables:
 		if m.focusedVarIdx == len(m.varInputs)-1 {
 			val := m.varInputs[m.focusedVarIdx].Value()
@@ -402,15 +404,15 @@ func (m QuickRunModel) renderPipelineList() string {
 
 	// Pipeline list header
 	headerStyle := lipgloss.NewStyle().Foreground(ColorOrange)
-	header := "│ " + headerStyle.Render(
-		padRight("Status", ColStatus)+
-			strings.Repeat(" ", ColGap)+
-			padRight("#ID", ColPipeline)+
-			padRight("Name", ColPipelineName)+
-			padRight("Branch", ColBranch)+
-			padRight("Triggered", ColTriggered)+
-			"Stages") + " │"
-	lines = append(lines, padToWidth(header, m.width))
+	headerContent := headerStyle.Render(
+		padRight("Status", ColStatus) +
+			strings.Repeat(" ", ColGap) +
+			padRight("#ID", ColPipeline) +
+			padRight("Name", ColPipelineName) +
+			padRight("Branch", ColBranch) +
+			padRight("Triggered", ColTriggered) +
+			"Stages")
+	lines = append(lines, "│ "+padToWidth(headerContent, m.width-4)+" │")
 	lines = append(lines, "│"+strings.Repeat("─", m.width-2)+"│")
 
 	// Calculate visible area
@@ -694,9 +696,100 @@ func (m QuickRunModel) renderWithForm() string {
 	result = append(result, listLines...)
 
 	// If showing branch popup, overlay it
-	if m.branchPopup != nil {
-		overlaid := m.branchPopup.RenderOverlay(result, 20, 3)
-		return strings.Join(overlaid, "\n")
+	if m.showingPopup {
+		return m.renderWithPopup(result)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func (m QuickRunModel) renderWithPopup(bgLines []string) string {
+	selectedStyle := lipgloss.NewStyle().Reverse(true)
+
+	// Build popup
+	title := " Branch "
+	popupWidth := 40
+	for _, opt := range m.branches {
+		if len(opt)+6 > popupWidth {
+			popupWidth = len(opt) + 6
+		}
+	}
+	if popupWidth > m.width-20 {
+		popupWidth = m.width - 20
+	}
+
+	var popup []string
+	titleLen := lipgloss.Width(title)
+	borderLen := popupWidth - titleLen - 4
+	if borderLen < 0 {
+		borderLen = 0
+	}
+	popup = append(popup, "┌─"+title+strings.Repeat("─", borderLen)+"─┐")
+
+	visibleItems := 10
+	start := m.popupCursor - visibleItems/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + visibleItems
+	if end > len(m.branches) {
+		end = len(m.branches)
+		start = maxInt(0, end-visibleItems)
+	}
+
+	// Show scroll indicator at top
+	if start > 0 {
+		scrollLine := padRight("  ▲ more above", popupWidth-4)
+		popup = append(popup, "│ "+GrayStyle.Render(scrollLine)+" │")
+	}
+
+	for i := start; i < end; i++ {
+		item := m.branches[i]
+		if len(item) > popupWidth-4 {
+			item = item[:popupWidth-7] + "..."
+		}
+		itemPadded := padRight(item, popupWidth-4)
+		if i == m.popupCursor {
+			popup = append(popup, "│ "+selectedStyle.Render(itemPadded)+" │")
+		} else {
+			popup = append(popup, "│ "+itemPadded+" │")
+		}
+	}
+
+	// Show scroll indicator at bottom
+	if end < len(m.branches) {
+		scrollLine := padRight("  ▼ more below", popupWidth-4)
+		popup = append(popup, "│ "+GrayStyle.Render(scrollLine)+" │")
+	}
+
+	popup = append(popup, "└"+strings.Repeat("─", popupWidth-2)+"┘")
+
+	// Position popup - reconstruct lines completely to avoid ANSI slicing issues
+	// bgLines have format: │<content>│ (form panel borders)
+	// Main grid will wrap with additional │...│
+	popupStartY := 2
+	popupStartX := 22
+	innerWidth := m.width - 2 // Width inside the form panel borders (│ on each side)
+
+	var result []string
+	for i, line := range bgLines {
+		if i >= popupStartY && i < popupStartY+len(popup) {
+			popupIdx := i - popupStartY
+			popupLine := popup[popupIdx]
+			popupLineWidth := lipgloss.Width(popupLine)
+
+			// Build: │ + padding + popup + padding + │
+			beforePadding := strings.Repeat(" ", popupStartX)
+			remainingWidth := innerWidth - popupStartX - popupLineWidth
+			if remainingWidth < 0 {
+				remainingWidth = 0
+			}
+			afterPadding := strings.Repeat(" ", remainingWidth)
+			newLine := "│" + beforePadding + popupLine + afterPadding + "│"
+			result = append(result, newLine)
+		} else {
+			result = append(result, line)
+		}
 	}
 
 	return strings.Join(result, "\n")
@@ -770,7 +863,8 @@ func (m QuickRunModel) renderPipelineListPanel(width, height int) []string {
 
 	// Header
 	headerStyle := lipgloss.NewStyle().Foreground(ColorOrange)
-	lines = append(lines, "│ "+headerStyle.Render("Recent Pipelines")+strings.Repeat(" ", width-20)+"│")
+	headerContent := headerStyle.Render("Recent Pipelines")
+	lines = append(lines, "│ "+padToWidth(headerContent, width-4)+" │")
 	lines = append(lines, "│"+strings.Repeat("─", width-2)+"│")
 
 	// Pipeline rows
