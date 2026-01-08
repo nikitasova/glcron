@@ -15,6 +15,7 @@ type ScheduleListModel struct {
 	schedules     []models.Schedule
 	filtered      []models.Schedule
 	cursor        int
+	scrollOffset  int
 	width         int
 	height        int
 	search        textinput.Model
@@ -25,7 +26,7 @@ type ScheduleListModel struct {
 	deleteID    int
 
 	// Ownership
-	currentUser       *models.User
+	currentUser        *models.User
 	takeOwnershipPopup *ConfirmPopup
 	takeOwnershipID    int
 }
@@ -55,10 +56,43 @@ func (m *ScheduleListModel) SetItems(schedules []models.Schedule) {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+	m.adjustScroll()
 }
 
 func (m *ScheduleListModel) SetCurrentUser(user *models.User) {
 	m.currentUser = user
+}
+
+// getVisibleRows returns how many schedule rows can be shown
+func (m *ScheduleListModel) getVisibleRows() int {
+	// Height minus search row, empty line, header row
+	return m.height - 3
+}
+
+// adjustScroll ensures the cursor is visible
+func (m *ScheduleListModel) adjustScroll() {
+	visibleRows := m.getVisibleRows()
+	if visibleRows <= 0 {
+		visibleRows = 5
+	}
+
+	// Scroll up if cursor is above visible area
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	}
+
+	// Scroll down if cursor is below visible area
+	if m.cursor >= m.scrollOffset+visibleRows {
+		m.scrollOffset = m.cursor - visibleRows + 1
+	}
+
+	// Handle wrap-around
+	if m.cursor == 0 {
+		m.scrollOffset = 0
+	}
+	if m.cursor == len(m.filtered)-1 && len(m.filtered) > visibleRows {
+		m.scrollOffset = len(m.filtered) - visibleRows
+	}
 }
 
 // isOwner checks if the current user owns the given schedule
@@ -153,12 +187,14 @@ func (m ScheduleListModel) Update(msg tea.Msg) (ScheduleListModel, tea.Cmd) {
 			} else if len(m.filtered) > 0 {
 				m.cursor = len(m.filtered) - 1 // wrap to last
 			}
+			m.adjustScroll()
 		case "down", "j":
 			if m.cursor < len(m.filtered)-1 {
 				m.cursor++
 			} else if len(m.filtered) > 0 {
 				m.cursor = 0 // wrap to first
 			}
+			m.adjustScroll()
 		case "enter", "e":
 			if m.cursor < len(m.filtered) {
 				schedule := m.filtered[m.cursor]
@@ -237,6 +273,7 @@ func (m *ScheduleListModel) filterSchedules() {
 	query := strings.ToLower(m.search.Value())
 	if query == "" {
 		m.filtered = m.schedules
+		m.adjustScroll()
 		return
 	}
 
@@ -250,6 +287,7 @@ func (m *ScheduleListModel) filterSchedules() {
 	}
 	m.filtered = filtered
 	m.cursor = 0
+	m.scrollOffset = 0
 }
 
 func (m ScheduleListModel) View() string {
@@ -328,8 +366,40 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		padRight("Next", colNext)
 	lines = append(lines, headerStyle.Render(headerRow))
 
-	// Table rows
-	for i, schedule := range m.filtered {
+	// Calculate visible area and scrollbar
+	visibleRows := m.getVisibleRows()
+	needsScroll := NeedsScrollbar(len(m.filtered), visibleRows)
+
+	scrollbar := RenderScrollbar(ScrollbarConfig{
+		TotalItems:   len(m.filtered),
+		VisibleItems: visibleRows,
+		ScrollOffset: m.scrollOffset,
+		Height:       visibleRows,
+	})
+
+	// Table rows with scrolling
+	endIdx := m.scrollOffset + visibleRows
+	if endIdx > len(m.filtered) {
+		endIdx = len(m.filtered)
+	}
+
+	for rowIdx := 0; rowIdx < visibleRows; rowIdx++ {
+		i := m.scrollOffset + rowIdx
+
+		// Get scrollbar character for this row
+		scrollChar := " "
+		if needsScroll && rowIdx < len(scrollbar) {
+			scrollChar = scrollbar[rowIdx]
+		}
+
+		if i >= len(m.filtered) {
+			// Empty row
+			lines = append(lines, padToWidth("", width-1)+scrollChar)
+			continue
+		}
+
+		schedule := m.filtered[i]
+
 		// Active indicator (filled = active, empty = inactive)
 		activeIcon := "○"
 		activeStyle := grayStyle
@@ -339,8 +409,6 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		}
 
 		// Pipeline status based on LastPipeline from GitLab
-		// ○ gray (unknown/no pipeline), ● green (success), ● red (failed)
-		// ◐ yellow (running/pending), ○ gray (canceled/skipped)
 		statusIcon := "○"
 		statusStyle := grayStyle
 		if schedule.LastPipeline != nil && schedule.LastPipeline.Status != "" {
@@ -366,7 +434,7 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 			nextRun = formatRelativeTime(*schedule.NextRunAt)
 		}
 
-		// Build row columns - truncate description (no wrapping in table)
+		// Build row columns
 		colActiveStr := padRight(activeIcon, colActive)
 		colDescStr := padRight(truncateStr(schedule.Description, colDescription-2), colDescription)
 		colCronStr := padRight(truncateStr(schedule.Cron, colCron-2), colCron)
@@ -377,7 +445,7 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 		if i == m.cursor {
 			// Selected row - rectangle highlight
 			plainRow := indent + colActiveStr + colDescStr + colCronStr + colBranchStr + colStatusStr + colNextStr
-			lines = append(lines, selectedStyle.Render(plainRow))
+			lines = append(lines, padToWidth(selectedStyle.Render(plainRow), width-1)+scrollChar)
 		} else {
 			// Normal row
 			row := indent +
@@ -387,7 +455,7 @@ func (m ScheduleListModel) renderLeftColumn(width int) []string {
 				colBranchStr +
 				statusStyle.Render(colStatusStr) +
 				colNextStr
-			lines = append(lines, row)
+			lines = append(lines, padToWidth(row, width-1)+scrollChar)
 		}
 	}
 

@@ -417,12 +417,13 @@ func (m QuickRunModel) renderPipelineList() string {
 
 	// Calculate visible area
 	visibleRows := m.getVisiblePipelineRows()
-	needsScroll := len(m.pipelines) > visibleRows
+	needsScroll := NeedsScrollbar(len(m.pipelines), visibleRows)
 
-	// Pipeline rows
+	// First, collect all content lines (without scrollbar)
+	var contentLines []string
+
 	if len(m.pipelines) == 0 {
-		emptyLine := "│" + padToWidth("  "+GrayStyle.Render("No pipelines found. Press R to run a new pipeline."), m.width-2) + "│"
-		lines = append(lines, emptyLine)
+		contentLines = append(contentLines, "  "+GrayStyle.Render("No pipelines found. Press R to run a new pipeline."))
 	} else {
 		endIdx := m.scrollOffset + visibleRows
 		if endIdx > len(m.pipelines) {
@@ -431,18 +432,33 @@ func (m QuickRunModel) renderPipelineList() string {
 
 		for i := m.scrollOffset; i < endIdx; i++ {
 			p := m.pipelines[i]
-			pipelineLines := m.renderPipelineRow(p, i == m.selectedPipeline, needsScroll, i, visibleRows)
-			lines = append(lines, pipelineLines...)
+			pipelineContentLines := m.renderPipelineRowContent(p, i == m.selectedPipeline)
+			contentLines = append(contentLines, pipelineContentLines...)
 		}
 	}
 
-	// Fill remaining space
-	for len(lines) < m.height-1 {
-		scrollIndicator := " "
-		if needsScroll {
-			scrollIndicator = "│"
+	// Calculate scrollbar
+	scrollbarHeight := visibleRows
+	scrollbar := RenderScrollbar(ScrollbarConfig{
+		TotalItems:   len(m.pipelines),
+		VisibleItems: visibleRows,
+		ScrollOffset: m.scrollOffset,
+		Height:       scrollbarHeight,
+	})
+
+	// Apply scrollbar to content lines
+	for i := 0; i < visibleRows; i++ {
+		content := ""
+		if i < len(contentLines) {
+			content = contentLines[i]
 		}
-		lines = append(lines, "│"+strings.Repeat(" ", m.width-3)+scrollIndicator+"│")
+
+		scrollChar := " "
+		if needsScroll && i < len(scrollbar) {
+			scrollChar = scrollbar[i]
+		}
+
+		lines = append(lines, "│"+padToWidth(content, m.width-3)+scrollChar+"│")
 	}
 
 	// Bottom border
@@ -451,7 +467,8 @@ func (m QuickRunModel) renderPipelineList() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected bool, needsScroll bool, rowIdx int, visibleRows int) []string {
+// renderPipelineRowContent returns content lines without borders (for use with scrollbar)
+func (m QuickRunModel) renderPipelineRowContent(p models.PipelineWithJobs, selected bool) []string {
 	var lines []string
 
 	// Status icon
@@ -473,21 +490,6 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 	// Stages visualization with trigger indicator
 	stagesStr := m.renderStagesWithTrigger(p.Pipeline.Source, p.Stages)
 
-	// Scroll indicator
-	scrollChar := " "
-	if needsScroll {
-		// Show scroll position indicator
-		scrollPos := rowIdx - m.scrollOffset
-		totalVisible := visibleRows
-		if scrollPos == 0 && m.scrollOffset > 0 {
-			scrollChar = "▲"
-		} else if scrollPos == totalVisible-1 && m.scrollOffset+visibleRows < len(m.pipelines) {
-			scrollChar = "▼"
-		} else {
-			scrollChar = "│"
-		}
-	}
-
 	// Main row with gap between Status and ID
 	rowContent := " " +
 		statusStyle.Render(padRight(statusIcon+" "+p.Pipeline.Status, ColStatus)) +
@@ -499,9 +501,9 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 		stagesStr
 
 	if selected {
-		lines = append(lines, "│"+SelectedStyle.Render(padToWidth(rowContent, m.width-3))+scrollChar+"│")
+		lines = append(lines, SelectedStyle.Render(rowContent))
 	} else {
-		lines = append(lines, "│"+padToWidth(rowContent, m.width-3)+scrollChar+"│")
+		lines = append(lines, rowContent)
 	}
 
 	// Show stage details for selected pipeline (under Stages column, reverse order)
@@ -509,7 +511,7 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 		// Calculate indent to align under Stages column
 		stagesIndent := 1 + ColStatus + ColGap + ColPipeline + ColPipelineName + ColBranch + ColTriggered
 		indent := strings.Repeat(" ", stagesIndent)
-		
+
 		// Show trigger source info if triggered by another pipeline
 		if isTriggerSource(p.Pipeline.Source) {
 			// Show the upstream project name if available, otherwise show source type
@@ -521,20 +523,20 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 			if p.Pipeline.User != nil && p.Pipeline.User.Username != "" {
 				triggerInfo += " " + GrayStyle.Render("(@"+p.Pipeline.User.Username+")")
 			}
-			lines = append(lines, "│"+padToWidth(triggerInfo, m.width-3)+scrollChar+"│")
+			lines = append(lines, triggerInfo)
 			// Gap after trigger info
-			lines = append(lines, "│"+padToWidth("", m.width-3)+scrollChar+"│")
+			lines = append(lines, "")
 		}
-		
+
 		// Show stages in reverse order (from last to first)
 		for i := len(p.Stages) - 1; i >= 0; i-- {
 			stage := p.Stages[i]
 			stageIcon, stageStyle := getStatusIconAndStyle(stage.Status)
 			stageLine := indent + "- " + stage.Name + ": " + stageStyle.Render(stageIcon+" "+stage.Status)
-			lines = append(lines, "│"+padToWidth(stageLine, m.width-3)+scrollChar+"│")
+			lines = append(lines, stageLine)
 		}
 		// pb-1: padding bottom
-		lines = append(lines, "│"+padToWidth("", m.width-3)+scrollChar+"│")
+		lines = append(lines, "")
 	}
 
 	return lines
@@ -600,7 +602,7 @@ func getPipelineDisplayName(source, name string) string {
 	// Fallback based on source
 	switch source {
 	case "schedule":
-		return "Scheduled run"
+		return "Scheduled"
 	case "merge_request_event":
 		return "Merge request"
 	case "push":

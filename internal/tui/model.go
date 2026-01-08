@@ -127,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentHeight := m.height - 4
+		contentHeight := m.height - 6 // Must match renderGrid: top border + header + sep + sep + footer + bottom border
 		m.configList.SetSize(m.width-2, contentHeight)
 		m.scheduleList.SetSize(m.width-2, contentHeight)
 		m.scheduleForm.SetSize(m.width-2, contentHeight)

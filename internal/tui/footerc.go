@@ -6,6 +6,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Footer configuration
+const (
+	FooterDefaultGap = " │ " // Separator between footer items
+)
+
 // FooterItem represents a single hotkey item in the footer
 type FooterItem struct {
 	Key         string
@@ -13,11 +18,15 @@ type FooterItem struct {
 }
 
 // Footer manages the footer/legend display for all screens
-type Footer struct{}
+type Footer struct {
+	Gap string // Separator between items
+}
 
 // NewFooter creates a new footer instance
 func NewFooter() *Footer {
-	return &Footer{}
+	return &Footer{
+		Gap: FooterDefaultGap,
+	}
 }
 
 // GetItems returns the footer items for a given screen
@@ -38,7 +47,7 @@ func (f *Footer) GetItems(screen Screen) []FooterItem {
 		return []FooterItem{
 			// {Key: "↑↓", Description: "Navigate"},
 			{Key: "/", Description: "Search"},
-			{Key: "e", Description: "Edit"},
+			// {Key: "e", Description: "Edit"},
 			{Key: "c", Description: "Create"},
 			{Key: "y", Description: "Yonk"},
 			{Key: "d", Description: "Delete"},
@@ -101,7 +110,11 @@ func (f *Footer) RenderItems(items []FooterItem, width int) string {
 		parts = append(parts, YellowStyle.Render(item.Key)+" "+item.Description)
 	}
 
-	legend := strings.Join(parts, "  │  ")
+	gap := f.Gap
+	if gap == "" {
+		gap = FooterDefaultGap
+	}
+	legend := strings.Join(parts, gap)
 
 	// Center the legend
 	legendWidth := lipgloss.Width(legend)
