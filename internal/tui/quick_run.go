@@ -12,7 +12,7 @@ import (
 
 // QuickRunPipelinesListLimit defines how many pipelines to fetch from API
 // This value can be adjusted as needed
-const QuickRunPipelinesListLimit = 10
+const QuickRunPipelinesListLimit = 15
 
 // Column widths for pipeline list
 const (
