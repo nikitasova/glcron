@@ -415,75 +415,8 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) renderLegend() string {
-	yellow := YellowStyle
-
-	var items []string
-
-	switch m.screen {
-	case ScreenConfigList:
-		items = []string{
-			yellow.Render("↑↓") + " Navigate",
-			yellow.Render("Enter") + " Select",
-			yellow.Render("c") + " Create",
-			yellow.Render("e") + " Edit",
-			yellow.Render("d") + " Delete",
-			yellow.Render("h") + " Help",
-			yellow.Render("q") + " Quit",
-		}
-	case ScreenScheduleList:
-		items = []string{
-			yellow.Render("↑↓") + " Navigate",
-			yellow.Render("/") + " Search",
-			yellow.Render("e") + " Edit",
-			yellow.Render("c") + " Create",
-			yellow.Render("y") + " Yonk",
-			yellow.Render("d") + " Delete",
-			yellow.Render("r") + " Run Pipeline",
-			yellow.Render("R") + " Quick Run",
-			yellow.Render("A") + " Toggle",
-			yellow.Render("t") + " Take ownership",
-			yellow.Render("u") + " Update",
-			yellow.Render("o") + " Configs",
-			yellow.Render("h") + " Help",
-			yellow.Render("q") + " Quit",
-		}
-	case ScreenEditSchedule, ScreenNewSchedule:
-		items = []string{
-			yellow.Render("↑↓") + " Navigate",
-			yellow.Render("Enter") + " Select/Toggle",
-			yellow.Render("Ctrl+S") + " Save",
-			yellow.Render("h") + " Help",
-			yellow.Render("Esc") + " Cancel",
-		}
-	case ScreenEditConfig, ScreenNewConfig:
-		items = []string{
-			yellow.Render("↑↓") + " Navigate",
-			yellow.Render("Tab") + " Next",
-			yellow.Render("Ctrl+S") + " Save",
-			yellow.Render("h") + " Help",
-			yellow.Render("Esc") + " Cancel",
-		}
-	case ScreenQuickRun:
-		items = []string{
-			yellow.Render("R") + " New Run",
-			yellow.Render("u") + " Update",
-			yellow.Render("↑↓") + " Navigate",
-			yellow.Render("h") + " Help",
-			yellow.Render("Esc") + " Back",
-			yellow.Render("q") + " Quit",
-		}
-	}
-
-	legend := strings.Join(items, "  │  ")
-
-	// Center the legend (using visible width for proper centering)
-	width := m.width - 2
-	legendWidth := lipgloss.Width(legend)
-	if legendWidth >= width {
-		return legend
-	}
-	padding := (width - legendWidth) / 2
-	return strings.Repeat(" ", padding) + legend
+	footer := NewFooter()
+	return footer.Render(m.screen, m.width-2)
 }
 
 // Navigation handlers
