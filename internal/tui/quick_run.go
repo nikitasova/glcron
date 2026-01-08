@@ -49,13 +49,13 @@ type QuickRunModel struct {
 	focusedVarIdx int
 
 	// Popup state
-	showingPopup bool
-	popupCursor  int
+	branchPopup *SelectPopup
 
 	// Pipeline list
 	pipelines        []models.PipelineWithJobs
 	selectedPipeline int
 	scrollOffset     int
+
 }
 
 func NewQuickRunModel() QuickRunModel {
@@ -126,7 +126,7 @@ func (m *QuickRunModel) rebuildVarInputs() {
 
 func (m *QuickRunModel) Reset() {
 	m.showingForm = false
-	m.showingPopup = false
+	m.branchPopup = nil
 	m.focusedField = QuickRunFieldBranch
 	m.selectedPipeline = 0
 	m.scrollOffset = 0
@@ -167,7 +167,7 @@ func (m *QuickRunModel) ShowForm() {
 func (m QuickRunModel) Update(msg tea.Msg) (QuickRunModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if m.showingPopup {
+		if m.branchPopup != nil {
 			return m.handlePopupKey(msg)
 		}
 
@@ -184,7 +184,7 @@ func (m QuickRunModel) Update(msg tea.Msg) (QuickRunModel, tea.Cmd) {
 		case "R":
 			m.ShowForm()
 		case "u":
-			// Manual refresh
+			// Manual refresh (status shown via global log panel)
 			return m, func() tea.Msg {
 				return refreshPipelinesMsg{}
 			}
@@ -205,21 +205,20 @@ func (m QuickRunModel) Update(msg tea.Msg) (QuickRunModel, tea.Cmd) {
 }
 
 func (m QuickRunModel) handlePopupKey(msg tea.KeyMsg) (QuickRunModel, tea.Cmd) {
+	if m.branchPopup == nil {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc":
-		m.showingPopup = false
+		m.branchPopup = nil
 	case "up", "k":
-		if m.popupCursor > 0 {
-			m.popupCursor--
-		}
+		m.branchPopup.MoveUp()
 	case "down", "j":
-		if m.popupCursor < len(m.branches)-1 {
-			m.popupCursor++
-		}
+		m.branchPopup.MoveDown()
 	case "enter":
-		m.showingPopup = false
-		m.branch = m.branches[m.popupCursor]
-		m.branchIdx = m.popupCursor
+		m.branch = m.branchPopup.Selected()
+		m.branchIdx = m.branchPopup.SelectedIndex()
+		m.branchPopup = nil
 	}
 	return m, nil
 }
@@ -309,8 +308,8 @@ func (m *QuickRunModel) focusCurrent() {
 func (m QuickRunModel) handleEnter() (QuickRunModel, tea.Cmd) {
 	switch m.focusedField {
 	case QuickRunFieldBranch:
-		m.showingPopup = true
-		m.popupCursor = m.branchIdx
+		m.branchPopup = NewSelectPopup("Select Branch", m.branches).WithWidth(50).WithVisibleItems(12)
+		m.branchPopup.SetCursor(m.branchIdx)
 	case QuickRunFieldVariables:
 		if m.focusedVarIdx == len(m.varInputs)-1 {
 			val := m.varInputs[m.focusedVarIdx].Value()
@@ -383,9 +382,10 @@ func (m QuickRunModel) View() string {
 func (m QuickRunModel) renderPipelineList() string {
 	var lines []string
 
-	// Title
+	// Title (status is shown in main app header)
 	title := " 🚀 Quick Pipeline Run "
 	titleWidth := lipgloss.Width(title)
+	
 	borderLen := m.width - titleWidth - 4
 	if borderLen < 0 {
 		borderLen = 0
@@ -465,12 +465,8 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 		pipelineID = fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", p.Pipeline.WebURL, pipelineID)
 	}
 
-	// Pipeline name (commit title or source indicator)
-	pipelineName := p.Pipeline.Name
-	if pipelineName == "" {
-		// Use source as fallback name
-		pipelineName = getSourceDisplayName(p.Pipeline.Source)
-	}
+	// Pipeline name based on source
+	pipelineName := getPipelineDisplayName(p.Pipeline.Source, p.Pipeline.Name)
 
 	// Stages visualization with trigger indicator
 	stagesStr := m.renderStagesWithTrigger(p.Pipeline.Source, p.Stages)
@@ -592,6 +588,33 @@ func getSourceDisplayName(source string) string {
 	}
 }
 
+// getPipelineDisplayName returns a display name for the pipeline
+func getPipelineDisplayName(source, name string) string {
+	// If we have a name (commit title), use it for non-scheduled pipelines
+	if name != "" {
+		return name
+	}
+	
+	// Fallback based on source
+	switch source {
+	case "schedule":
+		return "Scheduled run"
+	case "merge_request_event":
+		return "Merge request"
+	case "push":
+		return "Push"
+	case "web":
+		return "Manual (web)"
+	case "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline":
+		return "Triggered"
+	default:
+		if source == "" {
+			return "-"
+		}
+		return source
+	}
+}
+
 // getTriggerSourceDescription returns a descriptive text for trigger sources
 func getTriggerSourceDescription(source string) string {
 	switch source {
@@ -670,9 +693,10 @@ func (m QuickRunModel) renderWithForm() string {
 	result = append(result, formLines...)
 	result = append(result, listLines...)
 
-	// If showing popup, overlay it
-	if m.showingPopup {
-		return m.renderWithPopup(result)
+	// If showing branch popup, overlay it
+	if m.branchPopup != nil {
+		overlaid := m.branchPopup.RenderOverlay(result, 20, 3)
+		return strings.Join(overlaid, "\n")
 	}
 
 	return strings.Join(result, "\n")
@@ -763,10 +787,7 @@ func (m QuickRunModel) renderPipelineListPanel(width, height int) []string {
 			pipelineID := fmt.Sprintf("#%d", p.Pipeline.ID)
 
 			// Pipeline name
-			pipelineName := p.Pipeline.Name
-			if pipelineName == "" {
-				pipelineName = getSourceDisplayName(p.Pipeline.Source)
-			}
+			pipelineName := getPipelineDisplayName(p.Pipeline.Source, p.Pipeline.Name)
 
 			stagesStr := m.renderStagesWithTrigger(p.Pipeline.Source, p.Stages)
 
@@ -797,80 +818,3 @@ func (m QuickRunModel) renderPipelineListPanel(width, height int) []string {
 	return lines
 }
 
-func (m QuickRunModel) renderWithPopup(bgLines []string) string {
-	selectedStyle := lipgloss.NewStyle().Reverse(true)
-
-	// Build popup
-	title := " Branch "
-	popupWidth := 40
-	for _, opt := range m.branches {
-		if len(opt)+6 > popupWidth {
-			popupWidth = len(opt) + 6
-		}
-	}
-	if popupWidth > m.width-10 {
-		popupWidth = m.width - 10
-	}
-
-	var popup []string
-	titleLen := lipgloss.Width(title)
-	borderLen := popupWidth - titleLen - 4
-	if borderLen < 0 {
-		borderLen = 0
-	}
-	popup = append(popup, "┌─"+title+strings.Repeat("─", borderLen)+"─┐")
-
-	visibleItems := 10
-	start := m.popupCursor - visibleItems/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + visibleItems
-	if end > len(m.branches) {
-		end = len(m.branches)
-		start = maxInt(0, end-visibleItems)
-	}
-
-	for i := start; i < end; i++ {
-		item := m.branches[i]
-		if len(item) > popupWidth-4 {
-			item = item[:popupWidth-7] + "..."
-		}
-		itemPadded := padRight(item, popupWidth-4)
-		if i == m.popupCursor {
-			popup = append(popup, "│ "+selectedStyle.Render(itemPadded)+" │")
-		} else {
-			popup = append(popup, "│ "+itemPadded+" │")
-		}
-	}
-
-	popup = append(popup, "└"+strings.Repeat("─", popupWidth-2)+"┘")
-
-	// Position popup
-	popupStartY := 3
-	popupStartX := 20
-
-	// Overlay popup on background
-	var result []string
-	for i, line := range bgLines {
-		if i >= popupStartY && i < popupStartY+len(popup) {
-			popupIdx := i - popupStartY
-			// Overlay the popup
-			before := ""
-			if popupStartX > 0 && len(line) > popupStartX {
-				before = line[:popupStartX]
-			}
-			popupLine := popup[popupIdx]
-			after := ""
-			afterStart := popupStartX + lipgloss.Width(popupLine)
-			if afterStart < len(line) {
-				after = line[afterStart:]
-			}
-			result = append(result, before+popupLine+after)
-		} else {
-			result = append(result, line)
-		}
-	}
-
-	return strings.Join(result, "\n")
-}
