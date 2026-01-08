@@ -817,9 +817,15 @@ func (m Model) loadPipelinesCmd() tea.Cmd {
 			return errMsg{err}
 		}
 
-		// Load jobs for each pipeline to get stage info
+		// Load details for each pipeline
 		var pipelinesWithJobs []models.PipelineWithJobs
 		for _, p := range pipelines {
+			// Fetch full pipeline details to get user info
+			fullPipeline, err := gitlabService.GetPipeline(p.ID)
+			if err == nil && fullPipeline != nil {
+				p = *fullPipeline
+			}
+
 			jobs, _ := gitlabService.GetPipelineJobs(p.ID)
 
 			// Aggregate stages from jobs
@@ -851,14 +857,40 @@ func (m Model) loadPipelinesCmd() tea.Cmd {
 				})
 			}
 
+			// For triggered pipelines, try to get upstream project name
+			upstreamProjectName := ""
+			if isTriggerSource(p.Source) {
+				bridges, _ := gitlabService.GetPipelineBridges(p.ID)
+				for _, bridge := range bridges {
+					if bridge.UpstreamPipeline != nil && bridge.UpstreamPipeline.Project != nil {
+						upstreamProjectName = bridge.UpstreamPipeline.Project.PathWithNamespace
+						if upstreamProjectName == "" {
+							upstreamProjectName = bridge.UpstreamPipeline.Project.Name
+						}
+						break
+					}
+				}
+			}
+
 			pipelinesWithJobs = append(pipelinesWithJobs, models.PipelineWithJobs{
-				Pipeline: p,
-				Jobs:     jobs,
-				Stages:   stages,
+				Pipeline:            p,
+				Jobs:                jobs,
+				Stages:              stages,
+				UpstreamProjectName: upstreamProjectName,
 			})
 		}
 
 		return pipelinesLoadedMsg{pipelines: pipelinesWithJobs}
+	}
+}
+
+// isTriggerSource returns true if the source indicates an external trigger
+func isTriggerSource(source string) bool {
+	switch source {
+	case "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline":
+		return true
+	default:
+		return false
 	}
 }
 

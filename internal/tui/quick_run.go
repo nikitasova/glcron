@@ -514,11 +514,18 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 		
 		// Show trigger source info if triggered by another pipeline
 		if isTriggerSource(p.Pipeline.Source) {
-			triggerInfo := indent + "↳ triggered by: " + GrayStyle.Render(getSourceDisplayName(p.Pipeline.Source))
+			// Show the upstream project name if available, otherwise show source type
+			triggerSource := p.UpstreamProjectName
+			if triggerSource == "" {
+				triggerSource = getTriggerSourceDescription(p.Pipeline.Source)
+			}
+			triggerInfo := indent + "↳ triggered by: " + BlueStyle.Render(triggerSource)
 			if p.Pipeline.User != nil && p.Pipeline.User.Username != "" {
-				triggerInfo += " (@" + p.Pipeline.User.Username + ")"
+				triggerInfo += " " + GrayStyle.Render("(@"+p.Pipeline.User.Username+")")
 			}
 			lines = append(lines, "│"+padToWidth(triggerInfo, m.width-3)+scrollChar+"│")
+			// Gap after trigger info
+			lines = append(lines, "│"+padToWidth("", m.width-3)+scrollChar+"│")
 		}
 		
 		// Show stages in reverse order (from last to first)
@@ -585,13 +592,19 @@ func getSourceDisplayName(source string) string {
 	}
 }
 
-// isTriggerSource returns true if the source indicates an external trigger
-func isTriggerSource(source string) bool {
+// getTriggerSourceDescription returns a descriptive text for trigger sources
+func getTriggerSourceDescription(source string) string {
 	switch source {
-	case "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline":
-		return true
+	case "trigger":
+		return "external API trigger"
+	case "pipeline":
+		return "upstream pipeline"
+	case "parent_pipeline":
+		return "parent project pipeline"
+	case "cross_project_pipeline":
+		return "cross-project pipeline"
 	default:
-		return false
+		return source
 	}
 }
 

@@ -50,6 +50,48 @@ type Pipeline struct {
 	CreatedAt *time.Time `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 	User      *User      `json:"user"`
+	// Upstream pipeline info (for child pipelines)
+	UpstreamPipeline *UpstreamPipeline `json:"-"` // Fetched separately
+}
+
+// UpstreamPipeline represents info about the pipeline that triggered this one
+type UpstreamPipeline struct {
+	ID          int    `json:"id"`
+	ProjectID   int    `json:"project_id"`
+	ProjectName string `json:"project_name"` // We'll populate this
+}
+
+// PipelineBridge represents a bridge job (upstream/downstream trigger)
+type PipelineBridge struct {
+	ID                 int                     `json:"id"`
+	Name               string                  `json:"name"`
+	Stage              string                  `json:"stage"`
+	Status             string                  `json:"status"`
+	DownstreamPipeline *DownstreamPipelineInfo `json:"downstream_pipeline"`
+	UpstreamPipeline   *UpstreamPipelineInfo   `json:"upstream_pipeline"`
+}
+
+// DownstreamPipelineInfo contains info about a triggered downstream pipeline
+type DownstreamPipelineInfo struct {
+	ID        int            `json:"id"`
+	Status    string         `json:"status"`
+	ProjectID int            `json:"project_id"`
+	Project   *ProjectInfo   `json:"project"`
+}
+
+// UpstreamPipelineInfo contains info about the upstream triggering pipeline  
+type UpstreamPipelineInfo struct {
+	ID        int          `json:"id"`
+	Status    string       `json:"status"`
+	ProjectID int          `json:"project_id"`
+	Project   *ProjectInfo `json:"project"`
+}
+
+// ProjectInfo contains basic project information
+type ProjectInfo struct {
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	PathWithNamespace string `json:"path_with_namespace"`
 }
 
 // PipelineJob represents a job in a pipeline
@@ -66,9 +108,10 @@ type PipelineJob struct {
 
 // PipelineWithJobs represents a pipeline with its jobs for display
 type PipelineWithJobs struct {
-	Pipeline Pipeline
-	Jobs     []PipelineJob
-	Stages   []StageInfo
+	Pipeline           Pipeline
+	Jobs               []PipelineJob
+	Stages             []StageInfo
+	UpstreamProjectName string // Name of the project that triggered this pipeline
 }
 
 // StageInfo represents aggregated stage information

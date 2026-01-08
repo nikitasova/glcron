@@ -31,7 +31,9 @@ type GitLabServiceInterface interface {
 	// Pipeline operations for Quick Run
 	CreatePipeline(req *models.PipelineCreateRequest) (*models.Pipeline, error)
 	GetPipelines(limit int) ([]models.Pipeline, error)
+	GetPipeline(pipelineID int) (*models.Pipeline, error)
 	GetPipelineJobs(pipelineID int) ([]models.PipelineJob, error)
+	GetPipelineBridges(pipelineID int) ([]models.PipelineBridge, error)
 }
 
 // GitLabService handles GitLab API interactions
@@ -554,6 +556,48 @@ func (g *GitLabService) GetPipelineJobs(pipelineID int) ([]models.PipelineJob, e
 	}
 
 	return jobs, nil
+}
+
+// GetPipeline fetches a single pipeline with full details
+func (g *GitLabService) GetPipeline(pipelineID int) (*models.Pipeline, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines/%d", g.projectID, pipelineID), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipeline: %s - %s", resp.Status, string(body))
+	}
+
+	var pipeline models.Pipeline
+	if err := json.NewDecoder(resp.Body).Decode(&pipeline); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline: %v", err)
+	}
+
+	return &pipeline, nil
+}
+
+// GetPipelineBridges fetches bridge jobs for a pipeline (upstream/downstream triggers)
+func (g *GitLabService) GetPipelineBridges(pipelineID int) ([]models.PipelineBridge, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines/%d/bridges", g.projectID, pipelineID), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipeline bridges: %s - %s", resp.Status, string(body))
+	}
+
+	var bridges []models.PipelineBridge
+	if err := json.NewDecoder(resp.Body).Decode(&bridges); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline bridges: %v", err)
+	}
+
+	return bridges, nil
 }
 
 // doRequest performs an HTTP request
