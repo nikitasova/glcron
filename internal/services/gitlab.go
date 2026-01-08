@@ -28,6 +28,12 @@ type GitLabServiceInterface interface {
 	UpdateVariable(scheduleID int, variable *models.Variable) error
 	DeleteVariable(scheduleID int, key string) error
 	ValidateConfig(config *models.Config) error
+	// Pipeline operations for Quick Run
+	CreatePipeline(req *models.PipelineCreateRequest) (*models.Pipeline, error)
+	GetPipelines(limit int) ([]models.Pipeline, error)
+	GetPipeline(pipelineID int) (*models.Pipeline, error)
+	GetPipelineJobs(pipelineID int) ([]models.PipelineJob, error)
+	GetPipelineBridges(pipelineID int) ([]models.PipelineBridge, error)
 }
 
 // GitLabService handles GitLab API interactions
@@ -473,6 +479,125 @@ func (g *GitLabService) DeleteVariable(scheduleID int, key string) error {
 	}
 
 	return nil
+}
+
+// CreatePipeline creates a new pipeline run
+func (g *GitLabService) CreatePipeline(req *models.PipelineCreateRequest) (*models.Pipeline, error) {
+	data := url.Values{}
+	data.Set("ref", req.Ref)
+
+	// Add variables
+	for i, v := range req.Variables {
+		data.Set(fmt.Sprintf("variables[%d][key]", i), v.Key)
+		data.Set(fmt.Sprintf("variables[%d][value]", i), v.Value)
+		varType := v.VariableType
+		if varType == "" {
+			varType = "env_var"
+		}
+		data.Set(fmt.Sprintf("variables[%d][variable_type]", i), varType)
+	}
+
+	resp, err := g.doRequest("POST", fmt.Sprintf("/api/v4/projects/%d/pipeline", g.projectID), strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create pipeline: %s - %s", resp.Status, string(body))
+	}
+
+	var pipeline models.Pipeline
+	if err := json.NewDecoder(resp.Body).Decode(&pipeline); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline: %v", err)
+	}
+
+	return &pipeline, nil
+}
+
+// GetPipelines fetches recent pipelines
+func (g *GitLabService) GetPipelines(limit int) ([]models.Pipeline, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines?per_page=%d&order_by=id&sort=desc", g.projectID, limit), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipelines: %s - %s", resp.Status, string(body))
+	}
+
+	var pipelines []models.Pipeline
+	if err := json.NewDecoder(resp.Body).Decode(&pipelines); err != nil {
+		return nil, fmt.Errorf("failed to decode pipelines: %v", err)
+	}
+
+	return pipelines, nil
+}
+
+// GetPipelineJobs fetches jobs for a pipeline
+func (g *GitLabService) GetPipelineJobs(pipelineID int) ([]models.PipelineJob, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines/%d/jobs?per_page=100", g.projectID, pipelineID), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipeline jobs: %s - %s", resp.Status, string(body))
+	}
+
+	var jobs []models.PipelineJob
+	if err := json.NewDecoder(resp.Body).Decode(&jobs); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline jobs: %v", err)
+	}
+
+	return jobs, nil
+}
+
+// GetPipeline fetches a single pipeline with full details
+func (g *GitLabService) GetPipeline(pipelineID int) (*models.Pipeline, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines/%d", g.projectID, pipelineID), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipeline: %s - %s", resp.Status, string(body))
+	}
+
+	var pipeline models.Pipeline
+	if err := json.NewDecoder(resp.Body).Decode(&pipeline); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline: %v", err)
+	}
+
+	return &pipeline, nil
+}
+
+// GetPipelineBridges fetches bridge jobs for a pipeline (upstream/downstream triggers)
+func (g *GitLabService) GetPipelineBridges(pipelineID int) ([]models.PipelineBridge, error) {
+	resp, err := g.doRequest("GET", fmt.Sprintf("/api/v4/projects/%d/pipelines/%d/bridges", g.projectID, pipelineID), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get pipeline bridges: %s - %s", resp.Status, string(body))
+	}
+
+	var bridges []models.PipelineBridge
+	if err := json.NewDecoder(resp.Body).Decode(&bridges); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline bridges: %v", err)
+	}
+
+	return bridges, nil
 }
 
 // doRequest performs an HTTP request

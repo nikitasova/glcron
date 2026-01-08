@@ -129,6 +129,24 @@ type ownershipTakenMsg struct {
 
 type refreshSchedulesMsg struct{}
 
+// Quick Run messages
+type quickRunPipelineMsg struct {
+	branch    string
+	variables []models.Variable
+}
+
+type pipelineCreatedMsg struct {
+	pipeline *models.Pipeline
+}
+
+type pipelinesLoadedMsg struct {
+	pipelines []models.PipelineWithJobs
+}
+
+type refreshPipelinesMsg struct{}
+
+type pipelineTickMsg struct{}
+
 // Helper to create navigate command
 func Navigate(screen Screen) tea.Cmd {
 	return func() tea.Msg {
