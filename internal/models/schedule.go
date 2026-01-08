@@ -40,11 +40,13 @@ type User struct {
 // Pipeline represents the last pipeline status
 type Pipeline struct {
 	ID        int        `json:"id"`
+	IID       int        `json:"iid"`
 	SHA       string     `json:"sha"`
 	Ref       string     `json:"ref"`
 	Status    string     `json:"status"` // "success", "failed", "pending", "running", "canceled"
 	WebURL    string     `json:"web_url"`
-	Source    string     `json:"source"`    // "push", "web", "trigger", "schedule", etc.
+	Source    string     `json:"source"` // "push", "web", "trigger", "schedule", "pipeline", "parent_pipeline", etc.
+	Name      string     `json:"name"`   // Pipeline name (usually commit title)
 	CreatedAt *time.Time `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 	User      *User      `json:"user"`

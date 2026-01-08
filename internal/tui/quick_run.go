@@ -16,11 +16,13 @@ const QuickRunPipelinesListLimit = 10
 
 // Column widths for pipeline list
 const (
-	ColStatus    = 18
-	ColPipeline  = 12
-	ColBranch    = 20
-	ColCreatedBy = 18
-	ColStages    = 30
+	ColStatus       = 12
+	ColGap          = 2
+	ColPipeline     = 10
+	ColPipelineName = 22
+	ColBranch       = 16
+	ColTriggered    = 16
+	ColStages       = 20
 )
 
 type QuickRunField int
@@ -402,9 +404,11 @@ func (m QuickRunModel) renderPipelineList() string {
 	headerStyle := lipgloss.NewStyle().Foreground(ColorOrange)
 	header := "│ " + headerStyle.Render(
 		padRight("Status", ColStatus)+
-			padRight("#Pipeline", ColPipeline)+
-			padRight("Branch/Ref", ColBranch)+
-			padRight("Created By", ColCreatedBy)+
+			strings.Repeat(" ", ColGap)+
+			padRight("#ID", ColPipeline)+
+			padRight("Name", ColPipelineName)+
+			padRight("Branch", ColBranch)+
+			padRight("Triggered", ColTriggered)+
 			"Stages") + " │"
 	lines = append(lines, padToWidth(header, m.width))
 	lines = append(lines, "│"+strings.Repeat("─", m.width-2)+"│")
@@ -451,17 +455,25 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 	// Status icon
 	statusIcon, statusStyle := getStatusIconAndStyle(p.Pipeline.Status)
 
-	// Created by
-	createdBy := "Unknown"
-	if p.Pipeline.User != nil {
-		createdBy = p.Pipeline.User.Username
+	// Triggered by - show user or source type
+	triggeredBy := getTriggerInfo(p.Pipeline.Source, p.Pipeline.User)
+
+	// Pipeline ID with hyperlink
+	pipelineID := fmt.Sprintf("#%d", p.Pipeline.ID)
+	if p.Pipeline.WebURL != "" {
+		// Create clickable hyperlink using OSC 8 escape sequence
+		pipelineID = fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", p.Pipeline.WebURL, pipelineID)
 	}
 
-	// Pipeline ID
-	pipelineID := fmt.Sprintf("#%d", p.Pipeline.ID)
+	// Pipeline name (commit title or source indicator)
+	pipelineName := p.Pipeline.Name
+	if pipelineName == "" {
+		// Use source as fallback name
+		pipelineName = getSourceDisplayName(p.Pipeline.Source)
+	}
 
-	// Stages visualization (compact: start ─── end)
-	stagesStr := m.renderStagesCompact(p.Stages)
+	// Stages visualization with trigger indicator
+	stagesStr := m.renderStagesWithTrigger(p.Pipeline.Source, p.Stages)
 
 	// Scroll indicator
 	scrollChar := " "
@@ -478,12 +490,14 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 		}
 	}
 
-	// Main row
+	// Main row with gap between Status and ID
 	rowContent := " " +
 		statusStyle.Render(padRight(statusIcon+" "+p.Pipeline.Status, ColStatus)) +
-		padRight(truncateStr(pipelineID, ColPipeline-2), ColPipeline) +
+		strings.Repeat(" ", ColGap) +
+		padRight(pipelineID, ColPipeline) +
+		padRight(truncateStr(pipelineName, ColPipelineName-2), ColPipelineName) +
 		padRight(truncateStr(p.Pipeline.Ref, ColBranch-2), ColBranch) +
-		padRight(truncateStr(createdBy, ColCreatedBy-2), ColCreatedBy) +
+		padRight(truncateStr(triggeredBy, ColTriggered-2), ColTriggered) +
 		stagesStr
 
 	if selected {
@@ -495,8 +509,17 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 	// Show stage details for selected pipeline (under Stages column, reverse order)
 	if selected && len(p.Stages) > 0 {
 		// Calculate indent to align under Stages column
-		stagesIndent := 1 + ColStatus + ColPipeline + ColBranch + ColCreatedBy
+		stagesIndent := 1 + ColStatus + ColGap + ColPipeline + ColPipelineName + ColBranch + ColTriggered
 		indent := strings.Repeat(" ", stagesIndent)
+		
+		// Show trigger source info if triggered by another pipeline
+		if isTriggerSource(p.Pipeline.Source) {
+			triggerInfo := indent + "↳ triggered by: " + GrayStyle.Render(getSourceDisplayName(p.Pipeline.Source))
+			if p.Pipeline.User != nil && p.Pipeline.User.Username != "" {
+				triggerInfo += " (@" + p.Pipeline.User.Username + ")"
+			}
+			lines = append(lines, "│"+padToWidth(triggerInfo, m.width-3)+scrollChar+"│")
+		}
 		
 		// Show stages in reverse order (from last to first)
 		for i := len(p.Stages) - 1; i >= 0; i-- {
@@ -510,6 +533,66 @@ func (m QuickRunModel) renderPipelineRow(p models.PipelineWithJobs, selected boo
 	}
 
 	return lines
+}
+
+// getTriggerInfo returns who/what triggered the pipeline
+func getTriggerInfo(source string, user *models.User) string {
+	// If we have a user, show their username
+	if user != nil && user.Username != "" {
+		return "@" + user.Username
+	}
+	
+	// Otherwise show the source type
+	return getSourceDisplayName(source)
+}
+
+// getSourceDisplayName returns a human-readable name for the pipeline source
+func getSourceDisplayName(source string) string {
+	switch source {
+	case "push":
+		return "push"
+	case "web":
+		return "web"
+	case "trigger":
+		return "API trigger"
+	case "schedule":
+		return "schedule"
+	case "pipeline":
+		return "pipeline"
+	case "parent_pipeline":
+		return "parent pipeline"
+	case "cross_project_pipeline":
+		return "cross-project"
+	case "merge_request_event":
+		return "merge request"
+	case "external_pull_request_event":
+		return "external PR"
+	case "chat":
+		return "chat"
+	case "webide":
+		return "Web IDE"
+	case "external":
+		return "external"
+	case "ondemand_dast_scan":
+		return "DAST scan"
+	case "ondemand_dast_validation":
+		return "DAST validation"
+	default:
+		if source == "" {
+			return "-"
+		}
+		return source
+	}
+}
+
+// isTriggerSource returns true if the source indicates an external trigger
+func isTriggerSource(source string) bool {
+	switch source {
+	case "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline":
+		return true
+	default:
+		return false
+	}
 }
 
 // getStatusIconAndStyle returns the icon and style for a given status
@@ -543,8 +626,23 @@ func (m QuickRunModel) renderStagesCompact(stages []models.StageInfo) string {
 		parts = append(parts, style.Render(icon))
 	}
 
-	// Join with dashes: o-o-o-o
-	return strings.Join(parts, "-")
+	// Join with spaced dashes: o — o — o — o
+	return strings.Join(parts, " — ")
+}
+
+// renderStagesWithTrigger renders stages with trigger indicator if pipeline was triggered
+func (m QuickRunModel) renderStagesWithTrigger(source string, stages []models.StageInfo) string {
+	stagesStr := m.renderStagesCompact(stages)
+	
+	// Check if pipeline was triggered by another pipeline/project
+	// Sources that indicate external trigger: "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline"
+	switch source {
+	case "trigger", "pipeline", "parent_pipeline", "cross_project_pipeline":
+		// Show trigger indicator: ○ → stages
+		return GrayStyle.Render("○") + " → " + stagesStr
+	default:
+		return stagesStr
+	}
 }
 
 func (m QuickRunModel) renderWithForm() string {
@@ -646,20 +744,25 @@ func (m QuickRunModel) renderPipelineListPanel(width, height int) []string {
 		for i, p := range m.pipelines {
 			statusIcon, statusStyle := getStatusIconAndStyle(p.Pipeline.Status)
 
-			createdBy := "Unknown"
-			if p.Pipeline.User != nil {
-				createdBy = "@" + p.Pipeline.User.Username
-			}
+			// Triggered by
+			triggeredBy := getTriggerInfo(p.Pipeline.Source, p.Pipeline.User)
 
 			pipelineID := fmt.Sprintf("#%d", p.Pipeline.ID)
 
-			stagesStr := m.renderStagesCompact(p.Stages)
+			// Pipeline name
+			pipelineName := p.Pipeline.Name
+			if pipelineName == "" {
+				pipelineName = getSourceDisplayName(p.Pipeline.Source)
+			}
 
-			rowContent := fmt.Sprintf(" %s %s %s %s %s",
+			stagesStr := m.renderStagesWithTrigger(p.Pipeline.Source, p.Stages)
+
+			rowContent := fmt.Sprintf(" %s  %s %s %s %s %s",
 				statusStyle.Render(statusIcon),
-				padRight(truncateStr(pipelineID, 10), 11),
-				padRight(truncateStr(p.Pipeline.Ref, 15), 16),
-				padRight(truncateStr(createdBy, 15), 16),
+				padRight(truncateStr(pipelineID, 8), 9),
+				padRight(truncateStr(pipelineName, 16), 17),
+				padRight(truncateStr(p.Pipeline.Ref, 12), 13),
+				padRight(truncateStr(triggeredBy, 12), 13),
 				stagesStr,
 			)
 
