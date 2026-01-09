@@ -19,9 +19,9 @@ const (
 	ColStatus       = 12
 	ColGap          = 2
 	ColPipeline     = 10
-	ColPipelineName = 22
-	ColBranch       = 16
-	ColTriggered    = 16
+	ColPipelineName = 12
+	ColBranch       = 14
+	ColTriggered    = 20
 	ColStages       = 20
 )
 
@@ -546,6 +546,10 @@ func (m QuickRunModel) renderPipelineRowContent(p models.PipelineWithJobs, selec
 func getTriggerInfo(source string, user *models.User) string {
 	// If we have a user, show their username
 	if user != nil && user.Username != "" {
+		// // Detect bot usernames (project access tokens) and show "glcron" instead
+		// if strings.Contains(user.Username, "_bot_") || strings.HasPrefix(user.Username, "project_") || strings.HasPrefix(user.Username, "group_") {
+		// 	return "glcron"
+		// }
 		return "@" + user.Username
 	}
 	
