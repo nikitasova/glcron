@@ -17,6 +17,9 @@ const AppName = "glcron"
 // AppVersion is set at build time via -ldflags
 var AppVersion = "dev"
 
+// Refresh intervals
+const PipelineRefreshInterval = 55 * time.Second // Auto-refresh interval for running pipelines
+
 // Screen represents the current view
 type Screen int
 
@@ -260,7 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if p.Pipeline.Status == "running" || p.Pipeline.Status == "pending" {
 				return m, tea.Batch(
 					ClearStatusAfter(3*time.Second),
-					tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+					tea.Tick(PipelineRefreshInterval, func(t time.Time) tea.Msg {
 						return refreshPipelinesMsg{}
 					}),
 				)
