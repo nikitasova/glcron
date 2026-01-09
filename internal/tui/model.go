@@ -256,19 +256,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pipelinesLoadedMsg:
 		m.quickRun.SetPipelines(msg.pipelines)
 		m.log.Success("Updated")
-		// Clear status after 3 seconds
-		cmds = append(cmds, ClearStatusAfter(3*time.Second))
-		// If any pipeline is running, schedule another refresh
-		for _, p := range msg.pipelines {
-			if p.Pipeline.Status == "running" || p.Pipeline.Status == "pending" {
-				return m, tea.Batch(
-					ClearStatusAfter(3*time.Second),
-					tea.Tick(PipelineRefreshInterval, func(t time.Time) tea.Msg {
-						return refreshPipelinesMsg{}
-					}),
-				)
-			}
+		// Always schedule next refresh when on QuickRun screen
+		if m.screen == ScreenQuickRun {
+			cmds = append(cmds, tea.Tick(PipelineRefreshInterval, func(t time.Time) tea.Msg {
+				return refreshPipelinesMsg{}
+			}))
 		}
+		cmds = append(cmds, ClearStatusAfter(3*time.Second))
 
 	case refreshPipelinesMsg:
 		if m.screen == ScreenQuickRun {
