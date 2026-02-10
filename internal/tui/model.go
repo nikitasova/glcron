@@ -109,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle help screen
 		if m.help.IsVisible() {
 			switch msg.String() {
-			case "h", "esc", "q":
+			case "h", "ctrl+h", "esc", "q":
 				m.help.Hide()
 				return m, nil
 			}
@@ -121,10 +121,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.screen == ScreenConfigList {
 				return m, tea.Quit
 			}
-		case "h":
-			// Show help for current screen
+		case "ctrl+h":
+			// Show help for current screen (works on all screens)
 			m.help.Show(m.screen)
 			return m, nil
+		case "h":
+			// Show help only on non-form screens (plain "h" conflicts with text input)
+			if m.screen != ScreenEditSchedule && m.screen != ScreenNewSchedule &&
+				m.screen != ScreenEditConfig && m.screen != ScreenNewConfig {
+				m.help.Show(m.screen)
+				return m, nil
+			}
 		}
 
 	case tea.WindowSizeMsg:

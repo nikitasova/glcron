@@ -66,7 +66,7 @@ func (f *Footer) GetItems(screen Screen) []FooterItem {
 			{Key: "↑↓", Description: "Navigate"},
 			{Key: "Enter", Description: "Select/Toggle"},
 			{Key: "Ctrl+S", Description: "Save"},
-			{Key: "h", Description: "Help"},
+			{Key: "Ctrl+H", Description: "Help"},
 			{Key: "Esc", Description: "Cancel"},
 		}
 
@@ -75,7 +75,7 @@ func (f *Footer) GetItems(screen Screen) []FooterItem {
 			{Key: "↑↓", Description: "Navigate"},
 			{Key: "Tab", Description: "Next"},
 			{Key: "Ctrl+S", Description: "Save"},
-			{Key: "h", Description: "Help"},
+			{Key: "Ctrl+H", Description: "Help"},
 			{Key: "Esc", Description: "Cancel"},
 		}
 
