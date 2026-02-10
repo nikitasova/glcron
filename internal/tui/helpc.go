@@ -162,7 +162,7 @@ func (m *HelpModel) getScheduleFormHelp() []HelpSection {
 			Title: "Actions",
 			Items: []HelpItem{
 				{Key: "Enter on Save", Description: "Save schedule"},
-				{Key: "h", Description: "Show this help"},
+				{Key: "Ctrl+H", Description: "Show this help"},
 				{Key: "Esc", Description: "Cancel and go back"},
 			},
 		},
@@ -182,7 +182,7 @@ func (m *HelpModel) getConfigFormHelp() []HelpSection {
 			Title: "Actions",
 			Items: []HelpItem{
 				{Key: "Enter on Save", Description: "Save configuration"},
-				{Key: "h", Description: "Show this help"},
+				{Key: "Ctrl+H", Description: "Show this help"},
 				{Key: "Esc", Description: "Cancel and go back"},
 			},
 		},
@@ -284,7 +284,12 @@ func (m *HelpModel) View() string {
 
 	// Footer
 	lines = append(lines, "│"+strings.Repeat(" ", contentWidth)+"│")
-	footerLine := "  " + GrayStyle.Render("Press ") + YellowStyle.Render("h") + GrayStyle.Render(" or ") + YellowStyle.Render("Esc") + GrayStyle.Render(" to close")
+	closeKey := "h"
+	if m.parentScreen == ScreenEditSchedule || m.parentScreen == ScreenNewSchedule ||
+		m.parentScreen == ScreenEditConfig || m.parentScreen == ScreenNewConfig {
+		closeKey = "Ctrl+H"
+	}
+	footerLine := "  " + GrayStyle.Render("Press ") + YellowStyle.Render(closeKey) + GrayStyle.Render(" or ") + YellowStyle.Render("Esc") + GrayStyle.Render(" to close")
 	lines = append(lines, "│"+padToWidth(footerLine, contentWidth)+"│")
 
 	// Fill remaining space
