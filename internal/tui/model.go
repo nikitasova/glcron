@@ -508,6 +508,7 @@ func (m Model) handleSaveSchedule(msg saveScheduleMsg) (tea.Model, tea.Cmd) {
 	m.log.Loading("Saving...")
 
 	gitlabService := m.gitlabService
+	oldVars := m.getScheduleVariables(msg.id)
 
 	return m, func() tea.Msg {
 		req := &models.ScheduleUpdateRequest{
@@ -520,6 +521,10 @@ func (m Model) handleSaveSchedule(msg saveScheduleMsg) (tea.Model, tea.Cmd) {
 
 		if _, err := gitlabService.UpdateSchedule(msg.id, req); err != nil {
 			return errMsg{err}
+		}
+
+		if err := syncVariables(gitlabService, msg.id, oldVars, msg.variables); err != nil {
+			return errMsg{fmt.Errorf("schedule saved but failed to update variables: %v", err)}
 		}
 
 		schedules, _ := gitlabService.GetSchedules()
@@ -531,14 +536,13 @@ func (m Model) handleSaveScheduleWithOwnership(msg saveScheduleWithOwnershipMsg)
 	m.log.Loading("Taking ownership and saving...")
 
 	gitlabService := m.gitlabService
+	oldVars := m.getScheduleVariables(msg.id)
 
 	return m, func() tea.Msg {
-		// First take ownership
 		if _, err := gitlabService.TakeOwnership(msg.id); err != nil {
 			return errMsg{err}
 		}
 
-		// Then update the schedule
 		req := &models.ScheduleUpdateRequest{
 			Description:  &msg.description,
 			Cron:         &msg.cron,
@@ -551,9 +555,60 @@ func (m Model) handleSaveScheduleWithOwnership(msg saveScheduleWithOwnershipMsg)
 			return errMsg{err}
 		}
 
+		if err := syncVariables(gitlabService, msg.id, oldVars, msg.variables); err != nil {
+			return errMsg{fmt.Errorf("schedule saved but failed to update variables: %v", err)}
+		}
+
 		schedules, _ := gitlabService.GetSchedules()
 		return schedulesSavedMsg{schedules: schedules, message: "Ownership taken and schedule saved!"}
 	}
+}
+
+func (m Model) getScheduleVariables(scheduleID int) []models.Variable {
+	for _, s := range m.schedules {
+		if s.ID == scheduleID {
+			vars := make([]models.Variable, len(s.Variables))
+			copy(vars, s.Variables)
+			return vars
+		}
+	}
+	return nil
+}
+
+// syncVariables diffs old vs new variables and applies create/update/delete via the API.
+func syncVariables(svc services.GitLabServiceInterface, scheduleID int, oldVars, newVars []models.Variable) error {
+	oldMap := make(map[string]models.Variable, len(oldVars))
+	for _, v := range oldVars {
+		oldMap[v.Key] = v
+	}
+
+	newMap := make(map[string]models.Variable, len(newVars))
+	for _, v := range newVars {
+		newMap[v.Key] = v
+	}
+
+	for _, v := range newVars {
+		old, exists := oldMap[v.Key]
+		if !exists {
+			if err := svc.CreateVariable(scheduleID, &v); err != nil {
+				return fmt.Errorf("create variable %s: %w", v.Key, err)
+			}
+		} else if old.Value != v.Value {
+			if err := svc.UpdateVariable(scheduleID, &v); err != nil {
+				return fmt.Errorf("update variable %s: %w", v.Key, err)
+			}
+		}
+	}
+
+	for _, v := range oldVars {
+		if _, exists := newMap[v.Key]; !exists {
+			if err := svc.DeleteVariable(scheduleID, v.Key); err != nil {
+				return fmt.Errorf("delete variable %s: %w", v.Key, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (m Model) handleCreateSchedule(msg createScheduleMsg) (tea.Model, tea.Cmd) {
