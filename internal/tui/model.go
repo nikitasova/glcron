@@ -396,7 +396,7 @@ func (m Model) renderHeader() string {
 	orange := TitleStyle
 	green := GreenStyle
 
-	left := " " + orange.Render(AppName) + " " + AppVersion
+	left := " " + orange.Render(AppName) + " v" + AppVersion
 	if m.currentConfigIdx >= 0 && m.currentConfigIdx < len(m.configs) {
 		left += " - " + green.Render(m.configs[m.currentConfigIdx].Name)
 	}
