@@ -10,7 +10,6 @@
 
 <p align="center">
   <a href="https://github.com/nikitasova/glcron/releases"><img src="https://img.shields.io/github/v/release/nikitasova/glcron?style=flat-square&color=orange" alt="Release"></a>
-  <a href="https://github.com/nikitasova/glcron/releases"><img src="https://img.shields.io/github/downloads/nikitasova/glcron/total?style=flat-square&color=blue" alt="Downloads"></a>
   <a href="https://github.com/nikitasova/glcron/blob/main/LICENSE"><img src="https://img.shields.io/github/license/nikitasova/glcron?style=flat-square" alt="License"></a>
   <a href="https://github.com/nikitasova/glcron/stargazers"><img src="https://img.shields.io/github/stars/nikitasova/glcron?style=flat-square" alt="Stars"></a>
   <a href="https://github.com/nikitasova/glcron/network/members"><img src="https://img.shields.io/github/forks/nikitasova/glcron?style=flat-square" alt="Forks"></a>
